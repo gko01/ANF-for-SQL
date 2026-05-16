@@ -1,8 +1,8 @@
-# ANF Migration & Evaluation: CATORHYPSQL1
+﻿# ANF Migration & Evaluation: SQLPRD01
 **Azure NetApp Files — SQL Server on Azure VM Technical Assessment**
 
 Prepared: May 16, 2026  
-Reference VM: CATORHYPSQL1 (Production, RioTinto-CA-Production)  
+Reference VM: SQLPRD01 (Production, Contoso-CA-Production)  
 Scope: Architecture · Migration · Disaster Recovery · Operations · Technical Validation
 
 ---
@@ -22,7 +22,7 @@ Scope: Architecture · Migration · Disaster Recovery · Operations · Technical
 
 ### Current State
 
-CATORHYPSQL1 runs SQL Server on a Standard_D8s_v3 VM with five Standard SSD (StandardSSD_LRS) data disks totaling ~700 GB. Key findings from the 90-day discovery:
+SQLPRD01 runs SQL Server on a Standard_D8s_v3 VM with five Standard SSD (StandardSSD_LRS) data disks totaling ~700 GB. Key findings from the 90-day discovery:
 
 | Concern | Detail |
 |---|---|
@@ -50,7 +50,7 @@ CATORHYPSQL1 runs SQL Server on a Standard_D8s_v3 VM with five Standard SSD (Sta
 
 ```mermaid
 flowchart TB
-    subgraph vm["CATORHYPSQL1  ·  Standard_D8s_v3  ·  VM max: 12,800 IOPS / 192 MB/s"]
+    subgraph vm["SQLPRD01  ·  Standard_D8s_v3  ·  VM max: 12,800 IOPS / 192 MB/s"]
         sql(["SQL Server Engine"])
         c["C: OS Disk — StdSSD 127 GB — 500 IOPS / 100 MB/s"]
         f["F: disk01 — SQL Data — StdSSD 128 GB — 500 IOPS / 100 MB/s"]
@@ -76,7 +76,7 @@ flowchart TB
 
 ```mermaid
 flowchart TB
-    subgraph vm["CATORHYPSQL1  ·  Standard_D8s_v3"]
+    subgraph vm["SQLPRD01  ·  Standard_D8s_v3"]
         sql(["SQL Server Engine"])
         c["C: OS Disk — StdSSD 127 GB — kept as-is"]
         sql --- c
@@ -125,7 +125,7 @@ flowchart TB
 | **Multi-VM sharing** | Not supported (block) | Supported (same SMB3 share) — useful for AG |
 | **Latency profile** | Sub-millisecond (local NVMe path) | ~1 ms average (network SMB, same AZ) |
 
-### 2.4 Performance Sizing: Current vs ANF Target for CATORHYPSQL1
+### 2.4 Performance Sizing: Current vs ANF Target for SQLPRD01
 
 **Observed peak workloads (90-day):**
 
@@ -150,7 +150,7 @@ flowchart TB
 
 **Flexible service level throughput management:** The Flexible service level (Manual QoS) provides a minimum guaranteed throughput of 128 MiB/s for the pool and a maximum of `5 × 128 MiB/s × pool_TiB`. For a 4 TiB pool, the max is **2,560 MiB/s** — far exceeding the D8s_v3 VM NIC cap of 192 MB/s. The VM NIC, not the pool, is the practical per-VM ceiling. Example: boost sql-backup to 150 MiB/s during nightly backup window (02:00–05:00), then return to 16 MiB/s for the day — no pool resize, no volume resize, no SQL restart. When the 4 TiB pool is shared across multiple VMs, each VM can simultaneously receive up to its NIC cap, so the large pool budget supports all four production VMs at full speed. Automate with Azure Automation or a scheduled script calling `az netappfiles volume update --throughput-mibps`.
 
-**Note:** All volumes reside in a single 4 TiB Flexible capacity pool. The backup volume quota of 1 TiB is thin-provisioned — billing is based on consumed GiB only. Remaining pool capacity is shared with other production VMs (CATORSQL17, CATORSQL5, CATORSQL6).
+**Note:** All volumes reside in a single 4 TiB Flexible capacity pool. The backup volume quota of 1 TiB is thin-provisioned — billing is based on consumed GiB only. Remaining pool capacity is shared with other production VMs (SQLPRD02, SQLPRD03, SQLPRD04).
 
 ---
 
@@ -162,10 +162,10 @@ flowchart TB
 
 | Check | Action |
 |---|---|
-| ANF delegated subnet | Create or verify a `/28` subnet in the same VNet as CATORHYPSQL1, delegated to `Microsoft.NetApp/volumes` |
-| Active Directory integration | ANF SMB3 requires AD join for Kerberos/NTLM auth — register ANF account with the same AD domain as CATORHYPSQL1 |
+| ANF delegated subnet | Create or verify a `/28` subnet in the same VNet as SQLPRD01, delegated to `Microsoft.NetApp/volumes` |
+| Active Directory integration | ANF SMB3 requires AD join for Kerberos/NTLM auth — register ANF account with the same AD domain as SQLPRD01 |
 | SMB CA file share support | Verify SQL Server version ≥ 2012 with latest CU; confirm OS is Windows Server 2016+ |
-| Network latency baseline | Run `ping` and `psping` from CATORHYPSQL1 to ANF endpoint; target < 2 ms |
+| Network latency baseline | Run `ping` and `psping` from SQLPRD01 to ANF endpoint; target < 2 ms |
 | SQL Server data/log file locations | Run `SELECT name, physical_name FROM sys.master_files` to map all databases to current drive letters |
 
 #### Step 2: Baseline current performance (use as comparison baseline for test plan)
@@ -207,15 +207,15 @@ Based on drive letter analysis and ANF target design:
 ```bash
 # Azure CLI — Create ANF account
 az netappfiles account create \
-  --resource-group RT-CA-PRD-ANF-RG \
+  --resource-group Contoso-CA-PRD-ANF-RG \
   --location canadacentral \
-  --name anfacct-catorhyp
+  --name anfacct-contoso
 
 # Create capacity pool — Flexible service level, Manual QoS (single pool for all SQL volumes)
 az netappfiles pool create \
-  --resource-group RT-CA-PRD-ANF-RG \
+  --resource-group Contoso-CA-PRD-ANF-RG \
   --location canadacentral \
-  --account-name anfacct-catorhyp \
+  --account-name anfacct-contoso \
   --pool-name sql-pool-prd \
   --size 4 \
   --service-level Flexible \
@@ -226,15 +226,15 @@ az netappfiles pool create \
 # Create SMB volumes — set --throughput-mibps per volume (service-level inherited from pool)
 # sql-data: SQL data files, 32 MiB/s
 az netappfiles volume create \
-  --resource-group RT-CA-PRD-ANF-RG \
+  --resource-group Contoso-CA-PRD-ANF-RG \
   --location canadacentral \
-  --account-name anfacct-catorhyp \
+  --account-name anfacct-contoso \
   --pool-name sql-pool-prd \
   --name sql-data \
   --usage-threshold 512 \
   --throughput-mibps 32 \
   --protocol-types CIFS \
-  --subnet-id /subscriptions/<sub-id>/resourceGroups/RT-CA-PRD-ANF-RG/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/anf-delegated
+  --subnet-id /subscriptions/<sub-id>/resourceGroups/Contoso-CA-PRD-ANF-RG/providers/Microsoft.Network/virtualNetworks/<vnet>/subnets/anf-delegated
 
 # sql-logs: Transaction logs, 32 MiB/s (latency-sensitive)
 az netappfiles volume create ... --name sql-logs --usage-threshold 256 --throughput-mibps 32
@@ -255,8 +255,8 @@ az netappfiles volume create ... --name sql-backup --usage-threshold 1024 --thro
 
 ```bash
 az netappfiles account ad add \
-  --resource-group RT-CA-PRD-ANF-RG \
-  --account-name anfacct-catorhyp \
+  --resource-group Contoso-CA-PRD-ANF-RG \
+  --account-name anfacct-contoso \
   --username <svc-account> \
   --password <password> \
   --domain <domain.local> \
@@ -277,10 +277,10 @@ Use `robocopy` to pre-stage data to ANF while SQL continues serving traffic:
 # Note: cannot copy open .mdf/.ldf directly. Use backup/restore approach.
 
 # Step 1: Take full backup of all databases to ANF sql-backup volume
-$databases = Invoke-Sqlcmd -Query "SELECT name FROM sys.databases WHERE state = 0 AND name NOT IN ('tempdb')" -ServerInstance "CATORHYPSQL1"
+$databases = Invoke-Sqlcmd -Query "SELECT name FROM sys.databases WHERE state = 0 AND name NOT IN ('tempdb')" -ServerInstance "SQLPRD01"
 foreach ($db in $databases) {
     $backupPath = "\\ANFSMB01\sql-backup\migration\$($db.name)_FULL_$(Get-Date -Format yyyyMMdd).bak"
-    Invoke-Sqlcmd -Query "BACKUP DATABASE [$($db.name)] TO DISK = '$backupPath' WITH COMPRESSION, STATS = 10" -ServerInstance "CATORHYPSQL1"
+    Invoke-Sqlcmd -Query "BACKUP DATABASE [$($db.name)] TO DISK = '$backupPath' WITH COMPRESSION, STATS = 10" -ServerInstance "SQLPRD01"
 }
 ```
 
@@ -343,7 +343,7 @@ After 7-day validation period (SQL running on ANF, all tests passed):
 
 ### 4.1 Current DR State
 
-CATORHYPSQL1 currently relies on:
+SQLPRD01 currently relies on:
 
 | Component | Current Implementation | Limitation |
 |---|---|---|
@@ -426,13 +426,13 @@ ANF Backup is a managed long-term backup that stores data in Azure storage indep
 
 ```mermaid
 flowchart TB
-    t1["Tier 1 — High Availability — &lt; 30 sec RTO<br/>SQL Always On AG · Primary: CATORHYPSQL1 AZ1 · Secondary: new VM AZ2<br/>Both mount ANF volumes via SMB3"]
+    t1["Tier 1 — High Availability — &lt; 30 sec RTO<br/>SQL Always On AG · Primary: SQLPRD01 AZ1 · Secondary: new VM AZ2<br/>Both mount ANF volumes via SMB3"]
     t2["Tier 2 — Zone Failure DR — ~30 min RTO / ~20 min RPO<br/>ANF Cross-Zone Replication · AZ1 volumes to AZ2 async<br/>DR VM pre-provisioned off"]
     t3["Tier 3 — Long-term / Vault — Hours RTO / 1h RPO<br/>ANF Snapshot Policy + ANF Backup to Azure Storage<br/>Replaces Azure Backup MARS"]
     t1 --> t2 --> t3
 ```
 
-**Phased approach for RioTinto:** Start with Tier 3 (snapshots + ANF backup) to immediately resolve backup capacity crisis, then add Tier 2 (CZR) for zone DR, then evaluate Tier 1 (AG) based on RTO requirements.
+**Phased approach for Contoso:** Start with Tier 3 (snapshots + ANF backup) to immediately resolve backup capacity crisis, then add Tier 2 (CZR) for zone DR, then evaluate Tier 1 (AG) based on RTO requirements.
 
 ### 4.4 DR Comparison Matrix
 
@@ -469,8 +469,8 @@ flowchart TB
 ```bash
 # Expand sql-backup from 1 TiB to 2 TiB
 az netappfiles volume update \
-  --resource-group RT-CA-PRD-ANF-RG \
-  --account-name anfacct-catorhyp \
+  --resource-group Contoso-CA-PRD-ANF-RG \
+  --account-name anfacct-contoso \
   --pool-name sql-pool-prd \
   --name sql-backup \
   --usage-threshold 2048
@@ -483,8 +483,8 @@ az netappfiles volume update \
 # Boost sql-backup throughput before nightly backup window (e.g., 02:00)
 # Flexible pool max is 2,560 MiB/s; VM NIC cap on D8s_v3 is ~192 MB/s in practice
 az netappfiles volume update \
-  --resource-group RT-CA-PRD-ANF-RG \
-  --account-name anfacct-catorhyp \
+  --resource-group Contoso-CA-PRD-ANF-RG \
+  --account-name anfacct-contoso \
   --pool-name sql-pool-prd \
   --name sql-backup \
   --throughput-mibps 150
@@ -499,8 +499,8 @@ az netappfiles volume update ... --name sql-index --throughput-mibps 8
 
 # Check current throughput assignments across all volumes in the pool
 az netappfiles volume list \
-  --resource-group RT-CA-PRD-ANF-RG \
-  --account-name anfacct-catorhyp \
+  --resource-group Contoso-CA-PRD-ANF-RG \
+  --account-name anfacct-contoso \
   --pool-name sql-pool-prd \
   --query "[].{Name:name, ThroughputMibps:throughputMibps, QuotaGiB:usageThreshold}" -o table
 ```
@@ -511,8 +511,8 @@ az netappfiles volume list \
 
 ```bash
 az netappfiles snapshot create \
-  --resource-group RT-CA-PRD-ANF-RG \
-  --account-name anfacct-catorhyp \
+  --resource-group Contoso-CA-PRD-ANF-RG \
+  --account-name anfacct-contoso \
   --pool-name sql-pool-prd \
   --volume-name sql-data \
   --name pre-patching-$(date +%Y%m%d%H%M)
@@ -572,8 +572,8 @@ Snapshots consume delta space in the capacity pool (not the volume quota). Monit
 ```bash
 # List snapshot sizes for sql-data
 az netappfiles snapshot list \
-  --resource-group RT-CA-PRD-ANF-RG \
-  --account-name anfacct-catorhyp \
+  --resource-group Contoso-CA-PRD-ANF-RG \
+  --account-name anfacct-contoso \
   --pool-name sql-pool-prd \
   --volume-name sql-data \
   --query "[].{Name:name, Created:created}" -o table
@@ -657,11 +657,11 @@ Resolution:
 
 ### 6.2 Test Environment
 
-Use **CATORHYPSQLC1 (NPE)** as the validation target — it is the direct Non-Production equivalent of CATORHYPSQL1 (same SKU: D8s_v3, same disk layout, named volumes confirming SQL role mapping). This ensures production is not impacted during testing.
+Use **SQLNPE01 (NPE)** as the validation target — it is the direct Non-Production equivalent of SQLPRD01 (same SKU: D8s_v3, same disk layout, named volumes confirming SQL role mapping). This ensures production is not impacted during testing.
 
 ```
-Test VM: CATORHYPSQLC1 (Standard_D8s_v3, NPE)
-ANF test account: anfacct-catorhyp-npe (same ANF setup as target production design)
+Test VM: SQLNPE01 (Standard_D8s_v3, NPE)
+ANF test account: anfacct-contoso-npe (same ANF setup as target production design)
 Test volumes: npe-sql-data, npe-sql-logs, npe-sql-tempdb, npe-sql-index, npe-sql-backup
 Duration: 4 weeks (1 week setup, 1 week functional/perf, 1 week DR, 1 week ops)
 ```
@@ -672,7 +672,7 @@ Duration: 4 weeks (1 week setup, 1 week functional/perf, 1 week DR, 1 week ops)
 
 | Step | Action | Expected Result |
 |---|---|---|
-| T1.1 | Create ANF test volumes; mount as SMB3 UNC paths on CATORHYPSQLC1 | Drive letters map to ANF UNC paths successfully |
+| T1.1 | Create ANF test volumes; mount as SMB3 UNC paths on SQLNPE01 | Drive letters map to ANF UNC paths successfully |
 | T1.2 | Restore test database from backup to ANF sql-data and sql-logs | Database comes ONLINE without error |
 | T1.3 | Run SQL DBCC CHECKDB on restored database | DBCC reports 0 errors |
 | T1.4 | Create a new database with data, log, and tempdb files on ANF volumes | Database creation completes; files visible in ANF volume |
@@ -735,16 +735,16 @@ JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = m
 ```bash
 # Freeze SQL (via SQL command or VSS), then:
 az netappfiles snapshot create \
-  --resource-group RT-CA-NPE-ANF-RG \
-  --account-name anfacct-catorhyp-npe \
+  --resource-group Contoso-CA-NPE-ANF-RG \
+  --account-name anfacct-contoso-npe \
   --pool-name sql-pool-npe \
   --volume-name npe-sql-data \
   --name snapshot-t3-$(date +%Y%m%d%H%M)
 
 # To revert volume to snapshot
 az netappfiles volume revert \
-  --resource-group RT-CA-NPE-ANF-RG \
-  --account-name anfacct-catorhyp-npe \
+  --resource-group Contoso-CA-NPE-ANF-RG \
+  --account-name anfacct-contoso-npe \
   --pool-name sql-pool-npe \
   --name npe-sql-data \
   --snapshot-id <snapshot-resource-id>
@@ -769,15 +769,15 @@ az netappfiles volume revert \
 ```bash
 # Break replication and authorize DR volume
 az netappfiles volume replication approve-external-replication \
-  --resource-group RT-CA-NPE-ANF-RG \
-  --account-name anfacct-catorhyp-npe \
+  --resource-group Contoso-CA-NPE-ANF-RG \
+  --account-name anfacct-contoso-npe \
   --pool-name sql-pool-npe-dr \
   --volume-name npe-sql-data-dr
 
 # After DR testing, re-establish replication back to primary
 az netappfiles volume replication re-initialize \
-  --resource-group RT-CA-NPE-ANF-RG \
-  --account-name anfacct-catorhyp-npe \
+  --resource-group Contoso-CA-NPE-ANF-RG \
+  --account-name anfacct-contoso-npe \
   --pool-name sql-pool-npe \
   --volume-name npe-sql-data
 ```
@@ -834,14 +834,14 @@ az netappfiles volume replication re-initialize \
 | **Week 1** | ANF NPE infrastructure setup; AD integration; volume creation; T1 functional tests |
 | **Week 2** | T2 performance baseline vs ANF; T5 capacity scaling; T7 operational checks |
 | **Week 3** | T3 snapshot create/restore; T6 ANF backup; T4 CZR setup and failover drill |
-| **Week 4** | Full cutover rehearsal on CATORHYPSQLC1; document results; production readiness sign-off |
-| **Week 5+** | Production migration of CATORHYPSQL1 using validated runbook |
+| **Week 4** | Full cutover rehearsal on SQLNPE01; document results; production readiness sign-off |
+| **Week 5+** | Production migration of SQLPRD01 using validated runbook |
 
 ### 6.6 Production Readiness Gate
 
-Before proceeding to production migration of CATORHYPSQL1, all T1–T7 tests must pass and the following must be signed off:
+Before proceeding to production migration of SQLPRD01, all T1–T7 tests must pass and the following must be signed off:
 
-- [ ] Network latency from CATORHYPSQL1 to ANF endpoint confirmed < 2 ms
+- [ ] Network latency from SQLPRD01 to ANF endpoint confirmed < 2 ms
 - [ ] SQL Server error log clean (no SMB-related warnings) after 72-hour NPE soak
 - [ ] ANF snapshot policy configured and first scheduled snapshot confirmed
 - [ ] CZR replication established and lag < 20 minutes confirmed
@@ -854,7 +854,7 @@ Before proceeding to production migration of CATORHYPSQL1, all T1–T7 tests mus
 
 ## Appendix A: Cost Comparison Estimate
 
-### Current monthly cost (CATORHYPSQL1 data disks only)
+### Current monthly cost (SQLPRD01 data disks only)
 
 | Disk | SKU | Size | Est. Monthly Cost |
 |---|---|---|---|
@@ -877,13 +877,13 @@ Before proceeding to production migration of CATORHYPSQL1, all T1–T7 tests mus
 
 **Single pool advantage:** A single Flexible capacity pool eliminates the need for separate Standard, Premium, and Ultra pools. The Flexible service level's large throughput ceiling (up to 2,560 MiB/s for a 4 TiB pool) allows individual volumes to be boosted well beyond what any Auto QoS tier offers — the D8s_v3 VM NIC (192 MB/s) is the practical limit, not the pool. All four production VMs share the 4 TiB pool, making cost per VM comparable to or lower than current Standard SSD disks while gaining 99.99% SLA, snapshots, CZR, and full throughput flexibility. The `--throughput-mibps` model means you only provision what is needed — there is no per-volume tier cost premium.
 
-> **Note:** ANF is economical when the 4 TiB capacity pool is shared across multiple VMs (CATORHYPSQL1, CATORSQL17, CATORSQL5, CATORSQL6). A shared pool amortizes the fixed 4 TiB floor across all four production VMs, targeting cost neutrality or better vs. individual Premium SSD disks while gaining significantly higher SLA, snapshots, CZR, and data management capabilities. Detailed pricing should be validated with the Azure Pricing Calculator using Canada Central rates.
+> **Note:** ANF is economical when the 4 TiB capacity pool is shared across multiple VMs (SQLPRD01, SQLPRD02, SQLPRD03, SQLPRD04). A shared pool amortizes the fixed 4 TiB floor across all four production VMs, targeting cost neutrality or better vs. individual Premium SSD disks while gaining significantly higher SLA, snapshots, CZR, and data management capabilities. Detailed pricing should be validated with the Azure Pricing Calculator using Canada Central rates.
 
 ### Potential VM Rightsizing and SQL Server License Reduction (post-migration)
 
 ANF's consistent low-latency I/O over SMB3 removes a common reason to over-provision compute: with direct-attached disks, DBAs often size VMs larger than the CPU workload requires to maintain IOPS and throughput headroom. With ANF, throughput is a pool-level parameter decoupled from VM size. This opens the door to a significant secondary cost saving.
 
-**CATORHYPSQL1 CPU evidence (90-day observed):**
+**SQLPRD01 CPU evidence (90-day observed):**
 
 | Metric | Value |
 |---|---|
@@ -908,8 +908,8 @@ ANF's consistent low-latency I/O over SMB3 removes a common reason to over-provi
 
 **Important caveats:**
 - This rightsizing analysis applies only after the ANF migration is validated and post-migration CPU / memory behavior is confirmed stable for ≥ 30 days.
-- Memory pressure (94% peak on CATORHYPSQL1) must be resolved before reducing RAM. If memory is the binding constraint, a memory-optimized SKU (e.g., Standard_E4s_v3: 4 vCPU, 32 GiB) preserves RAM while halving core license cost.
-- Azure Hybrid Benefit (AHB) may already apply to the SQL license; verify with the RioTinto EA/CSP agreement before calculating net savings.
+- Memory pressure (94% peak on SQLPRD01) must be resolved before reducing RAM. If memory is the binding constraint, a memory-optimized SKU (e.g., Standard_E4s_v3: 4 vCPU, 32 GiB) preserves RAM while halving core license cost.
+- Azure Hybrid Benefit (AHB) may already apply to the SQL license; verify with the Contoso EA/CSP agreement before calculating net savings.
 - This optimization is **not part of the migration design or test plan** — it is a post-migration cost review action.
 
 ---

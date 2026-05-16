@@ -1,9 +1,9 @@
-# Azure VM Discovery and Performance Report
+﻿# Azure VM Discovery and Performance Report
 
 Generated: 2026-04-10  
 Subscriptions:  
-- RioTinto-CA-Production (fc78d23e-3972-40bc-a96e-80841a2d101c)  
-- RioTinto-CA-Non-Production (393a132a-f2bb-44e5-936e-bd25f7a6e05a)
+- Contoso-CA-Production (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)  
+- Contoso-CA-Non-Production (yyyyyyyy-yyyy-yyyy-yyyy-yyyyyyyyyyyy)
 
 ## Table of Contents
 
@@ -20,56 +20,56 @@ Subscriptions:
 
 ## Executive Summary
 
-### Production (RioTinto-CA-Production)
-- 4 VMs found: CATORHYPSQL1, CATORSQL17, CATORSQL5, CATORSQL6.
+### Production (Contoso-CA-Production)
+- 4 VMs found: SQLPRD01, SQLPRD02, SQLPRD03, SQLPRD04.
 - CPU utilization is stable and generally low to moderate across all VMs.
-- Memory is the primary risk area on CATORHYPSQL1 and CATORSQL6, with peaks around 95%.
-- CATORSQL5 remains the healthiest overall VM with stable CPU and good memory headroom.
+- Memory is the primary risk area on SQLPRD01 and SQLPRD04, with peaks around 95%.
+- SQLPRD03 remains the healthiest overall VM with stable CPU and good memory headroom.
 - Disk usage is stable across 90 days; hotspots are concentrated on a single primary data disk per VM.
-- Highest-priority follow-up remains memory pressure monitoring and capacity planning on CATORSQL6 and CATORHYPSQL1.
+- Highest-priority follow-up remains memory pressure monitoring and capacity planning on SQLPRD04 and SQLPRD01.
 
-### Non-Production (RioTinto-CA-Non-Production)
-- 4 VMs found: CATORHYPSQLC1, CATORHYPSQLD1, CATORSQLD2, CATORSQLD5.
-- CPU is low across all NPE VMs except CATORSQLD5 (16% avg on a 2-vCPU VM, peaks near 50%).
-- Memory is elevated on CATORHYPSQLC1, CATORHYPSQLD1, and CATORSQLD5 (all >80% avg); CATORSQLD5 peaks at 91.44% on only 8 GiB.
-- CATORSQLD2 is the healthiest NPE VM with comfortable CPU and memory headroom.
-- Disk I/O is stable and low across all NPE VMs; LUN 0 is the burst hotspot on CATORHYPSQLC1 and CATORHYPSQLD1, LUN 4 is the hotspot on CATORSQLD5.
-- **Disk space alert:** CATORHYPSQLC1 J: (SQL-BACKUP) peaks at 97.34% used with only 6.81 GiB free at minimum — mirrors the same backup drive pressure seen on Production CATORHYPSQL1.
-- CATORHYPSQLD1 all drives healthy (<49% peak). CATORSQLD2 has the healthiest disk space profile. CATORSQLD5 disk space pending.
+### Non-Production (Contoso-CA-Non-Production)
+- 4 VMs found: SQLNPE01, SQLNPE02, SQLNPE03, SQLNPE04.
+- CPU is low across all NPE VMs except SQLNPE04 (16% avg on a 2-vCPU VM, peaks near 50%).
+- Memory is elevated on SQLNPE01, SQLNPE02, and SQLNPE04 (all >80% avg); SQLNPE04 peaks at 91.44% on only 8 GiB.
+- SQLNPE03 is the healthiest NPE VM with comfortable CPU and memory headroom.
+- Disk I/O is stable and low across all NPE VMs; LUN 0 is the burst hotspot on SQLNPE01 and SQLNPE02, LUN 4 is the hotspot on SQLNPE04.
+- **Disk space alert:** SQLNPE01 J: (SQL-BACKUP) peaks at 97.34% used with only 6.81 GiB free at minimum — mirrors the same backup drive pressure seen on Production SQLPRD01.
+- SQLNPE02 all drives healthy (<49% peak). SQLNPE03 has the healthiest disk space profile. SQLNPE04 disk space pending.
 
 ## Inventory and Capabilities
 
 ### Requested VMs
 
 #### Found — Production
-- CATORHYPSQL1
-- CATORSQL17
-- CATORSQL5
-- CATORSQL6
+- SQLPRD01
+- SQLPRD02
+- SQLPRD03
+- SQLPRD04
 
 #### Found — Non-Production
-- CATORHYPSQLC1
-- CATORHYPSQLD1
-- CATORSQLD2
-- CATORSQLD5
+- SQLNPE01
+- SQLNPE02
+- SQLNPE03
+- SQLNPE04
 
 ### VM SKU Capability Table — Production
 
 | VM Name | VM SKU | CPU (vCPU) | Memory (GiB) | Max IOPS | Max Throughput |
 |---|---|---:|---:|---:|---:|
-| CATORHYPSQL1 | Standard_D8s_v3 | 8 | 32 | 12,800 | 192 MB/s |
-| CATORSQL17 | Standard_B8ms | 8 | 32 | 4,320 | 50 MB/s |
-| CATORSQL5 | Standard_D4s_v3 | 4 | 16 | 6,400 | 96 MB/s |
-| CATORSQL6 | Standard_D4s_v3 | 4 | 16 | 6,400 | 96 MB/s |
+| SQLPRD01 | Standard_D8s_v3 | 8 | 32 | 12,800 | 192 MB/s |
+| SQLPRD02 | Standard_B8ms | 8 | 32 | 4,320 | 50 MB/s |
+| SQLPRD03 | Standard_D4s_v3 | 4 | 16 | 6,400 | 96 MB/s |
+| SQLPRD04 | Standard_D4s_v3 | 4 | 16 | 6,400 | 96 MB/s |
 
 ### VM SKU Capability Table — Non-Production
 
 | VM Name | VM SKU | CPU (vCPU) | Memory (GiB) | Max IOPS | Max Throughput |
 |---|---|---:|---:|---:|---:|
-| CATORHYPSQLC1 | Standard_D8s_v3 | 8 | 32 | 12,800 | 192 MB/s |
-| CATORHYPSQLD1 | Standard_D8s_v3 | 8 | 32 | 12,800 | 192 MB/s |
-| CATORSQLD2 | Standard_D4s_v3 | 4 | 16 | 6,400 | 96 MB/s |
-| CATORSQLD5 | Standard_D2s_v3 | 2 | 8 | 3,200 | 48 MB/s |
+| SQLNPE01 | Standard_D8s_v3 | 8 | 32 | 12,800 | 192 MB/s |
+| SQLNPE02 | Standard_D8s_v3 | 8 | 32 | 12,800 | 192 MB/s |
+| SQLNPE03 | Standard_D4s_v3 | 4 | 16 | 6,400 | 96 MB/s |
+| SQLNPE04 | Standard_D2s_v3 | 2 | 8 | 3,200 | 48 MB/s |
 
 ### Disk SKU Capability Table
 
@@ -103,7 +103,7 @@ Note: None of the current disk sizes exceed thresholds for expanded/performance-
 
 ## Compute Analysis by VM (7/30/90 Days) — Production
 
-### CATORHYPSQL1
+### SQLPRD01
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -119,7 +119,7 @@ Note: None of the current disk sizes exceed thresholds for expanded/performance-
 
 Summary: Compute is not constrained by CPU; memory remains the key risk.
 
-### CATORSQL17
+### SQLPRD02
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -135,7 +135,7 @@ Summary: Compute is not constrained by CPU; memory remains the key risk.
 
 Summary: CPU is healthy; memory is consistently elevated and should be watched.
 
-### CATORSQL5
+### SQLPRD03
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -151,7 +151,7 @@ Summary: CPU is healthy; memory is consistently elevated and should be watched.
 
 Summary: Best-balanced VM with consistent compute headroom.
 
-### CATORSQL6
+### SQLPRD04
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -175,7 +175,7 @@ Method used for all VMs:
 - Per-disk split = OS disk metrics + data disk metrics split by LUN
 - Aggregation = Hourly averages across each window, then average and maximum
 
-### CATORHYPSQL1
+### SQLPRD01
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -191,31 +191,31 @@ Method used for all VMs:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 14.57 | 53.98 | 0.75 | 2.74 |
-| CATORHYPSQL1-disk01 | 0 | 0.28 | 45.25 | 0.02 | 2.78 |
-| CATORHYPSQL1-disk02 | 1 | 1.70 | 36.31 | 1.44 | 34.05 |
-| CATORHYPSQL1-disk03 | 2 | 0.45 | 9.76 | 0.03 | 1.07 |
-| CATORHYPSQL1-disk04 | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
-| CATORHYPSQL1-disk05 | 4 | 3.36 | 306.44 | 0.82 | 17.02 |
+| SQLPRD01-disk01 | 0 | 0.28 | 45.25 | 0.02 | 2.78 |
+| SQLPRD01-disk02 | 1 | 1.70 | 36.31 | 1.44 | 34.05 |
+| SQLPRD01-disk03 | 2 | 0.45 | 9.76 | 0.03 | 1.07 |
+| SQLPRD01-disk04 | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
+| SQLPRD01-disk05 | 4 | 3.36 | 306.44 | 0.82 | 17.02 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 14.29 | 110.22 | 0.73 | 5.19 |
-| CATORHYPSQL1-disk01 | 0 | 0.28 | 45.58 | 0.03 | 9.14 |
-| CATORHYPSQL1-disk02 | 1 | 1.70 | 38.11 | 1.44 | 36.34 |
-| CATORHYPSQL1-disk03 | 2 | 0.31 | 63.68 | 0.02 | 6.84 |
-| CATORHYPSQL1-disk04 | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
-| CATORHYPSQL1-disk05 | 4 | 3.07 | 306.44 | 0.82 | 18.16 |
+| SQLPRD01-disk01 | 0 | 0.28 | 45.58 | 0.03 | 9.14 |
+| SQLPRD01-disk02 | 1 | 1.70 | 38.11 | 1.44 | 36.34 |
+| SQLPRD01-disk03 | 2 | 0.31 | 63.68 | 0.02 | 6.84 |
+| SQLPRD01-disk04 | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
+| SQLPRD01-disk05 | 4 | 3.07 | 306.44 | 0.82 | 18.16 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 14.24 | 110.22 | 0.73 | 5.19 |
-| CATORHYPSQL1-disk01 | 0 | 0.27 | 45.58 | 0.03 | 9.14 |
-| CATORHYPSQL1-disk02 | 1 | 1.70 | 38.11 | 1.44 | 36.34 |
-| CATORHYPSQL1-disk03 | 2 | 0.31 | 63.68 | 0.02 | 6.84 |
-| CATORHYPSQL1-disk04 | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
-| CATORHYPSQL1-disk05 | 4 | 3.00 | 306.44 | 0.82 | 18.16 |
+| SQLPRD01-disk01 | 0 | 0.27 | 45.58 | 0.03 | 9.14 |
+| SQLPRD01-disk02 | 1 | 1.70 | 38.11 | 1.44 | 36.34 |
+| SQLPRD01-disk03 | 2 | 0.31 | 63.68 | 0.02 | 6.84 |
+| SQLPRD01-disk04 | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
+| SQLPRD01-disk05 | 4 | 3.00 | 306.44 | 0.82 | 18.16 |
 
 #### Disk Space Utilization (7-Day Guest Metrics)
 | Drive | Size GiB | Avg Used GiB | Max Used GiB | Avg Free GiB | Min Free GiB | Avg Used % | Max Used % | Risk |
@@ -236,7 +236,7 @@ Findings:
 - C: and F: are both around 67 GiB used with roughly 60 GiB free, indicating moderate but stable utilization.
 - D:, G:, H:, and I: have substantial free capacity and low utilization risk.
 
-### CATORSQL17
+### SQLPRD02
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -252,31 +252,31 @@ Findings:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 18.67 | 33.28 | 0.83 | 1.72 |
-| CATORSQL17-datadisk01 | 0 | 0.01 | 0.16 | 0.00 | 0.01 |
-| CATORSQL17-datadisk02 | 1 | 14.85 | 178.71 | 0.33 | 5.23 |
-| CATORSQL17-datdisk03 | 2 | 2.46 | 51.81 | 1.25 | 25.46 |
-| CATORSQL17-datadisk04 | 3 | 26.07 | 504.98 | 1.91 | 55.50 |
-| CATORSQL17-datdisk05 | 4 | 3.38 | 51.56 | 0.18 | 3.03 |
+| SQLPRD02-datadisk01 | 0 | 0.01 | 0.16 | 0.00 | 0.01 |
+| SQLPRD02-datadisk02 | 1 | 14.85 | 178.71 | 0.33 | 5.23 |
+| SQLPRD02-datdisk03 | 2 | 2.46 | 51.81 | 1.25 | 25.46 |
+| SQLPRD02-datadisk04 | 3 | 26.07 | 504.98 | 1.91 | 55.50 |
+| SQLPRD02-datdisk05 | 4 | 3.38 | 51.56 | 0.18 | 3.03 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 18.34 | 120.18 | 0.81 | 5.06 |
-| CATORSQL17-datadisk01 | 0 | 0.02 | 3.48 | 0.00 | 0.66 |
-| CATORSQL17-datadisk02 | 1 | 15.29 | 186.54 | 0.35 | 9.81 |
-| CATORSQL17-datdisk03 | 2 | 2.47 | 52.69 | 1.25 | 25.82 |
-| CATORSQL17-datadisk04 | 3 | 26.54 | 599.60 | 1.90 | 61.30 |
-| CATORSQL17-datdisk05 | 4 | 3.19 | 51.92 | 0.17 | 3.14 |
+| SQLPRD02-datadisk01 | 0 | 0.02 | 3.48 | 0.00 | 0.66 |
+| SQLPRD02-datadisk02 | 1 | 15.29 | 186.54 | 0.35 | 9.81 |
+| SQLPRD02-datdisk03 | 2 | 2.47 | 52.69 | 1.25 | 25.82 |
+| SQLPRD02-datadisk04 | 3 | 26.54 | 599.60 | 1.90 | 61.30 |
+| SQLPRD02-datdisk05 | 4 | 3.19 | 51.92 | 0.17 | 3.14 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 18.31 | 120.18 | 0.81 | 5.06 |
-| CATORSQL17-datadisk01 | 0 | 0.02 | 3.48 | 0.00 | 0.66 |
-| CATORSQL17-datadisk02 | 1 | 15.31 | 186.54 | 0.35 | 9.81 |
-| CATORSQL17-datdisk03 | 2 | 2.47 | 52.69 | 1.25 | 25.82 |
-| CATORSQL17-datadisk04 | 3 | 26.25 | 599.60 | 1.88 | 61.30 |
-| CATORSQL17-datdisk05 | 4 | 3.16 | 51.92 | 0.16 | 3.14 |
+| SQLPRD02-datadisk01 | 0 | 0.02 | 3.48 | 0.00 | 0.66 |
+| SQLPRD02-datadisk02 | 1 | 15.31 | 186.54 | 0.35 | 9.81 |
+| SQLPRD02-datdisk03 | 2 | 2.47 | 52.69 | 1.25 | 25.82 |
+| SQLPRD02-datadisk04 | 3 | 26.25 | 599.60 | 1.88 | 61.30 |
+| SQLPRD02-datdisk05 | 4 | 3.16 | 51.92 | 0.16 | 3.14 |
 
 Findings:
 - LUN 3 is the primary hotspot disk.
@@ -301,7 +301,7 @@ Disk Space Findings:
 - G: and C: are moderate at ~51-59% with comfortable headroom.
 - E: and D: are lightly utilized and low risk.
 
-### CATORSQL5
+### SQLPRD03
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -317,32 +317,32 @@ Disk Space Findings:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 18.52 | 38.12 | 0.86 | 1.88 |
-| CATORSQL5-disk02 | 1 | 0.87 | 18.52 | 0.49 | 10.88 |
-| CATORSQL5-disk03 | 2 | 58.72 | 310.83 | 3.87 | 19.45 |
-| CATORSQL5-disk04 | 3 | 1.04 | 37.42 | 0.06 | 1.04 |
+| SQLPRD03-disk02 | 1 | 0.87 | 18.52 | 0.49 | 10.88 |
+| SQLPRD03-disk03 | 2 | 58.72 | 310.83 | 3.87 | 19.45 |
+| SQLPRD03-disk04 | 3 | 1.04 | 37.42 | 0.06 | 1.04 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 16.55 | 92.88 | 0.81 | 4.66 |
-| CATORSQL5-disk02 | 1 | 0.88 | 18.59 | 0.51 | 12.05 |
-| CATORSQL5-disk03 | 2 | 59.98 | 502.84 | 3.97 | 30.37 |
-| CATORSQL5-disk04 | 3 | 1.56 | 184.44 | 0.08 | 5.56 |
+| SQLPRD03-disk02 | 1 | 0.88 | 18.59 | 0.51 | 12.05 |
+| SQLPRD03-disk03 | 2 | 59.98 | 502.84 | 3.97 | 30.37 |
+| SQLPRD03-disk04 | 3 | 1.56 | 184.44 | 0.08 | 5.56 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 16.38 | 92.88 | 0.80 | 4.66 |
-| CATORSQL5-disk02 | 1 | 0.88 | 18.59 | 0.51 | 12.05 |
-| CATORSQL5-disk03 | 2 | 59.76 | 502.84 | 3.95 | 30.37 |
-| CATORSQL5-disk04 | 3 | 1.53 | 184.44 | 0.08 | 5.56 |
+| SQLPRD03-disk02 | 1 | 0.88 | 18.59 | 0.51 | 12.05 |
+| SQLPRD03-disk03 | 2 | 59.76 | 502.84 | 3.95 | 30.37 |
+| SQLPRD03-disk04 | 3 | 1.53 | 184.44 | 0.08 | 5.56 |
 
 Findings:
 - LUN 2 is the dominant workload disk.
 - LUN 3 has burst events but low sustained utilization.
 - Long-window trends are stable.
 
-### CATORSQL6
+### SQLPRD04
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -358,31 +358,31 @@ Findings:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 18.25 | 68.44 | 0.91 | 3.06 |
-| CATORSQL6-disk01 | 0 | 0.00 | 0.03 | 0.00 | 0.00 |
-| CATORSQL6-disk02 | 1 | 6.71 | 451.28 | 1.82 | 37.41 |
-| CATORSQL6-disk03 | 2 | 0.88 | 18.29 | 0.74 | 17.61 |
-| CATORSQL6-disk04 | 3 | 0.29 | 10.30 | 0.01 | 0.11 |
-| CATORSQL6-disk05 | 4 | 0.00 | 0.31 | 0.00 | 0.02 |
+| SQLPRD04-disk01 | 0 | 0.00 | 0.03 | 0.00 | 0.00 |
+| SQLPRD04-disk02 | 1 | 6.71 | 451.28 | 1.82 | 37.41 |
+| SQLPRD04-disk03 | 2 | 0.88 | 18.29 | 0.74 | 17.61 |
+| SQLPRD04-disk04 | 3 | 0.29 | 10.30 | 0.01 | 0.11 |
+| SQLPRD04-disk05 | 4 | 0.00 | 0.31 | 0.00 | 0.02 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 17.65 | 127.38 | 0.87 | 6.39 |
-| CATORSQL6-disk01 | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
-| CATORSQL6-disk02 | 1 | 6.34 | 451.28 | 1.81 | 41.55 |
-| CATORSQL6-disk03 | 2 | 0.88 | 20.19 | 0.74 | 19.75 |
-| CATORSQL6-disk04 | 3 | 0.27 | 10.53 | 0.01 | 0.12 |
-| CATORSQL6-disk05 | 4 | 0.01 | 1.78 | 0.00 | 0.63 |
+| SQLPRD04-disk01 | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
+| SQLPRD04-disk02 | 1 | 6.34 | 451.28 | 1.81 | 41.55 |
+| SQLPRD04-disk03 | 2 | 0.88 | 20.19 | 0.74 | 19.75 |
+| SQLPRD04-disk04 | 3 | 0.27 | 10.53 | 0.01 | 0.12 |
+| SQLPRD04-disk05 | 4 | 0.01 | 1.78 | 0.00 | 0.63 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 17.56 | 127.38 | 0.87 | 6.39 |
-| CATORSQL6-disk01 | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
-| CATORSQL6-disk02 | 1 | 6.19 | 451.28 | 1.80 | 41.55 |
-| CATORSQL6-disk03 | 2 | 0.88 | 20.19 | 0.74 | 19.75 |
-| CATORSQL6-disk04 | 3 | 0.26 | 10.53 | 0.01 | 0.12 |
-| CATORSQL6-disk05 | 4 | 0.01 | 1.78 | 0.00 | 0.63 |
+| SQLPRD04-disk01 | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
+| SQLPRD04-disk02 | 1 | 6.19 | 451.28 | 1.80 | 41.55 |
+| SQLPRD04-disk03 | 2 | 0.88 | 20.19 | 0.74 | 19.75 |
+| SQLPRD04-disk04 | 3 | 0.26 | 10.53 | 0.01 | 0.12 |
+| SQLPRD04-disk05 | 4 | 0.01 | 1.78 | 0.00 | 0.63 |
 
 Findings:
 - LUN 1 is the recurring disk hotspot.
@@ -410,38 +410,38 @@ Disk Space Findings:
 ### CPU Utilization Trends
 | VM | 7-Day Avg | 30-Day Avg | 90-Day Avg | 90-Day Trend |
 |---|---:|---:|---:|---|
-| CATORHYPSQL1 | 2.90% | 3.54% | 3.66% | Slight increase but stable |
-| CATORSQL17 | 6.40% | 6.51% | 6.51% | Completely stable |
-| CATORSQL5 | 8.89% | 8.70% | 8.69% | Completely stable |
-| CATORSQL6 | 12.82% | 13.02% | 13.00% | Completely stable |
+| SQLPRD01 | 2.90% | 3.54% | 3.66% | Slight increase but stable |
+| SQLPRD02 | 6.40% | 6.51% | 6.51% | Completely stable |
+| SQLPRD03 | 8.89% | 8.70% | 8.69% | Completely stable |
+| SQLPRD04 | 12.82% | 13.02% | 13.00% | Completely stable |
 
 ### Memory Utilization Trends
 | VM | 7-Day Avg | 30-Day Avg | 90-Day Avg | 90-Day Trend | Risk Level |
 |---|---:|---:|---:|---|---|
-| CATORHYPSQL1 | 85.15% | 81.58% | 81.72% | Stable, consistently high | Medium-High |
-| CATORSQL17 | 80.81% | 79.75% | 79.78% | Stable, consistently high | Medium |
-| CATORSQL5 | 65.69% | 63.62% | 63.62% | Stable, healthy | Low |
-| CATORSQL6 | 72.94% | 70.56% | 70.62% | Stable, elevated | Medium-High |
+| SQLPRD01 | 85.15% | 81.58% | 81.72% | Stable, consistently high | Medium-High |
+| SQLPRD02 | 80.81% | 79.75% | 79.78% | Stable, consistently high | Medium |
+| SQLPRD03 | 65.69% | 63.62% | 63.62% | Stable, healthy | Low |
+| SQLPRD04 | 72.94% | 70.56% | 70.62% | Stable, elevated | Medium-High |
 
 ### Peak Performance Analysis (90-Day Max)
 | VM | CPU Peak | Memory Peak | Constraint Risk |
 |---|---:|---:|---|
-| CATORHYPSQL1 | 11.91% | 94.38% | High (memory spikes) |
-| CATORSQL17 | 33.97% | 84.31% | Medium |
-| CATORSQL5 | 34.09% | 66.69% | Low |
-| CATORSQL6 | 33.47% | 94.88% | High (memory spikes) |
+| SQLPRD01 | 11.91% | 94.38% | High (memory spikes) |
+| SQLPRD02 | 33.97% | 84.31% | Medium |
+| SQLPRD03 | 34.09% | 66.69% | Low |
+| SQLPRD04 | 33.47% | 94.88% | High (memory spikes) |
 
 ### 30-Day Baseline Snapshot
 | VM | Avg CPU | Max CPU | Avg Mem | Max Mem | Health Status |
 |---|---:|---:|---:|---:|---|
-| CATORHYPSQL1 | 3.54% | 11.18% | 81.58% | 94.86% | Good - Monitor memory |
-| CATORSQL17 | 6.51% | 32.11% | 79.75% | 84.50% | Good - Memory elevated |
-| CATORSQL5 | 8.70% | 28.36% | 63.62% | 66.75% | Excellent - Well balanced |
-| CATORSQL6 | 13.02% | 32.43% | 70.56% | 94.94% | Fair - Watch CPU and memory |
+| SQLPRD01 | 3.54% | 11.18% | 81.58% | 94.86% | Good - Monitor memory |
+| SQLPRD02 | 6.51% | 32.11% | 79.75% | 84.50% | Good - Memory elevated |
+| SQLPRD03 | 8.70% | 28.36% | 63.62% | 66.75% | Excellent - Well balanced |
+| SQLPRD04 | 13.02% | 32.43% | 70.56% | 94.94% | Fair - Watch CPU and memory |
 
 ## Compute Analysis by VM (7/30/90 Days) — Non-Production
 
-### CATORHYPSQLC1
+### SQLNPE01
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -455,9 +455,9 @@ Disk Space Findings:
 | Average Memory Utilization | 84.81% | 82.38% | 82.45% | Stable elevated |
 | Maximum Memory Utilization | 92.16% | 93.59% | 93.59% | Stable high peaks |
 
-Summary: Very similar profile to Production CATORHYPSQL1. CPU is idle; memory is the constraint with peaks over 93%.
+Summary: Very similar profile to Production SQLPRD01. CPU is idle; memory is the constraint with peaks over 93%.
 
-### CATORHYPSQLD1
+### SQLNPE02
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -471,9 +471,9 @@ Summary: Very similar profile to Production CATORHYPSQL1. CPU is idle; memory is
 | Average Memory Utilization | 85.21% | 82.73% | 82.79% | Stable elevated |
 | Maximum Memory Utilization | 93.44% | 93.74% | 93.74% | Stable high peaks |
 
-Summary: Lowest CPU in the group; memory mirrors CATORHYPSQLC1 with peaks near 94%.
+Summary: Lowest CPU in the group; memory mirrors SQLNPE01 with peaks near 94%.
 
-### CATORSQLD2
+### SQLNPE03
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -489,7 +489,7 @@ Summary: Lowest CPU in the group; memory mirrors CATORHYPSQLC1 with peaks near 9
 
 Summary: Healthiest NPE VM with substantial compute headroom on both CPU and memory.
 
-### CATORSQLD5
+### SQLNPE04
 
 #### CPU Utilization
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -513,7 +513,7 @@ Method used for all VMs:
 - Per-disk split = OS disk metrics + data disk metrics split by LUN
 - Aggregation = Hourly averages across each window, then average and maximum
 
-### CATORHYPSQLC1
+### SQLNPE01
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -529,31 +529,31 @@ Method used for all VMs:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 13.27 | 63.54 | 0.77 | 3.85 |
-| CATORHYPSQLC1-SQL-DATA-F | 0 | 2.39 | 259.28 | 0.68 | 14.23 |
-| CATORHYPSQLC1-SQL-LOGS-G | 1 | 0.31 | 0.59 | 0.00 | 0.01 |
-| CATORHYPSQLC1-SQL-TEMP-H | 2 | 0.23 | 37.31 | 0.01 | 2.32 |
-| CATORHYPSQLC1-SQL-INDEX-I | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
-| CATORHYPSQLC1-SQL-BACKUP-J | 4 | 1.44 | 30.79 | 1.19 | 28.47 |
+| SQLNPE01-SQL-DATA-F | 0 | 2.39 | 259.28 | 0.68 | 14.23 |
+| SQLNPE01-SQL-LOGS-G | 1 | 0.31 | 0.59 | 0.00 | 0.01 |
+| SQLNPE01-SQL-TEMP-H | 2 | 0.23 | 37.31 | 0.01 | 2.32 |
+| SQLNPE01-SQL-INDEX-I | 3 | 0.00 | 0.04 | 0.00 | 0.01 |
+| SQLNPE01-SQL-BACKUP-J | 4 | 1.44 | 30.79 | 1.19 | 28.47 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 13.00 | 90.50 | 0.75 | 4.51 |
-| CATORHYPSQLC1-SQL-DATA-F | 0 | 2.30 | 259.62 | 0.67 | 14.70 |
-| CATORHYPSQLC1-SQL-LOGS-G | 1 | 0.31 | 0.92 | 0.00 | 0.02 |
-| CATORHYPSQLC1-SQL-TEMP-H | 2 | 0.22 | 38.05 | 0.02 | 3.81 |
-| CATORHYPSQLC1-SQL-INDEX-I | 3 | 0.00 | 0.17 | 0.00 | 0.01 |
-| CATORHYPSQLC1-SQL-BACKUP-J | 4 | 1.44 | 31.95 | 1.19 | 29.41 |
+| SQLNPE01-SQL-DATA-F | 0 | 2.30 | 259.62 | 0.67 | 14.70 |
+| SQLNPE01-SQL-LOGS-G | 1 | 0.31 | 0.92 | 0.00 | 0.02 |
+| SQLNPE01-SQL-TEMP-H | 2 | 0.22 | 38.05 | 0.02 | 3.81 |
+| SQLNPE01-SQL-INDEX-I | 3 | 0.00 | 0.17 | 0.00 | 0.01 |
+| SQLNPE01-SQL-BACKUP-J | 4 | 1.44 | 31.95 | 1.19 | 29.41 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 12.92 | 90.47 | 0.75 | 4.51 |
-| CATORHYPSQLC1-SQL-DATA-F | 0 | 2.25 | 259.62 | 0.67 | 14.70 |
-| CATORHYPSQLC1-SQL-LOGS-G | 1 | 0.31 | 0.92 | 0.00 | 0.02 |
-| CATORHYPSQLC1-SQL-TEMP-H | 2 | 0.21 | 38.05 | 0.02 | 3.81 |
-| CATORHYPSQLC1-SQL-INDEX-I | 3 | 0.00 | 0.17 | 0.00 | 0.01 |
-| CATORHYPSQLC1-SQL-BACKUP-J | 4 | 1.44 | 31.95 | 1.19 | 29.41 |
+| SQLNPE01-SQL-DATA-F | 0 | 2.25 | 259.62 | 0.67 | 14.70 |
+| SQLNPE01-SQL-LOGS-G | 1 | 0.31 | 0.92 | 0.00 | 0.02 |
+| SQLNPE01-SQL-TEMP-H | 2 | 0.21 | 38.05 | 0.02 | 3.81 |
+| SQLNPE01-SQL-INDEX-I | 3 | 0.00 | 0.17 | 0.00 | 0.01 |
+| SQLNPE01-SQL-BACKUP-J | 4 | 1.44 | 31.95 | 1.19 | 29.41 |
 
 Findings:
 - LUN 0 (SQL-DATA-F) is the burst IOPS hotspot with peaks over 259.
@@ -578,7 +578,7 @@ Disk Space Findings:
 - F: (SQL-DATA) and G: (SQL-LOGS) have comfortable free space.
 - D:, H: (SQL-TEMP), and I: (SQL-INDEX) are lightly utilized.
 
-### CATORHYPSQLD1
+### SQLNPE02
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -594,31 +594,31 @@ Disk Space Findings:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 11.49 | 38.76 | 0.68 | 2.07 |
-| CATORHYPSQLD1-datadisk-0 | 0 | 1.67 | 160.48 | 0.43 | 8.94 |
-| CATORHYPSQLD1-datadisk-1 | 1 | 0.02 | 1.37 | 0.00 | 0.02 |
-| CATORHYPSQLD1-datadisk-2 | 2 | 0.12 | 1.87 | 0.00 | 0.02 |
-| CATORHYPSQLD1-datadisk-3 | 3 | 0.00 | 0.05 | 0.00 | 0.01 |
-| CATORHYPSQLD1-datadisk-4 | 4 | 0.92 | 19.33 | 0.75 | 17.88 |
+| SQLNPE02-datadisk-0 | 0 | 1.67 | 160.48 | 0.43 | 8.94 |
+| SQLNPE02-datadisk-1 | 1 | 0.02 | 1.37 | 0.00 | 0.02 |
+| SQLNPE02-datadisk-2 | 2 | 0.12 | 1.87 | 0.00 | 0.02 |
+| SQLNPE02-datadisk-3 | 3 | 0.00 | 0.05 | 0.00 | 0.01 |
+| SQLNPE02-datadisk-4 | 4 | 0.92 | 19.33 | 0.75 | 17.88 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 10.99 | 87.59 | 0.66 | 4.43 |
-| CATORHYPSQLD1-datadisk-0 | 0 | 1.67 | 163.13 | 0.43 | 9.92 |
-| CATORHYPSQLD1-datadisk-1 | 1 | 0.01 | 1.37 | 0.00 | 0.58 |
-| CATORHYPSQLD1-datadisk-2 | 2 | 0.12 | 6.29 | 0.00 | 0.35 |
-| CATORHYPSQLD1-datadisk-3 | 3 | 0.00 | 0.18 | 0.00 | 0.01 |
-| CATORHYPSQLD1-datadisk-4 | 4 | 0.92 | 21.32 | 0.75 | 19.85 |
+| SQLNPE02-datadisk-0 | 0 | 1.67 | 163.13 | 0.43 | 9.92 |
+| SQLNPE02-datadisk-1 | 1 | 0.01 | 1.37 | 0.00 | 0.58 |
+| SQLNPE02-datadisk-2 | 2 | 0.12 | 6.29 | 0.00 | 0.35 |
+| SQLNPE02-datadisk-3 | 3 | 0.00 | 0.18 | 0.00 | 0.01 |
+| SQLNPE02-datadisk-4 | 4 | 0.92 | 21.32 | 0.75 | 19.85 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 10.91 | 87.59 | 0.65 | 4.43 |
-| CATORHYPSQLD1-datadisk-0 | 0 | 1.63 | 163.13 | 0.43 | 9.92 |
-| CATORHYPSQLD1-datadisk-1 | 1 | 0.01 | 1.37 | 0.00 | 0.58 |
-| CATORHYPSQLD1-datadisk-2 | 2 | 0.12 | 6.29 | 0.00 | 0.35 |
-| CATORHYPSQLD1-datadisk-3 | 3 | 0.00 | 0.18 | 0.00 | 0.01 |
-| CATORHYPSQLD1-datadisk-4 | 4 | 0.92 | 21.32 | 0.75 | 19.85 |
+| SQLNPE02-datadisk-0 | 0 | 1.63 | 163.13 | 0.43 | 9.92 |
+| SQLNPE02-datadisk-1 | 1 | 0.01 | 1.37 | 0.00 | 0.58 |
+| SQLNPE02-datadisk-2 | 2 | 0.12 | 6.29 | 0.00 | 0.35 |
+| SQLNPE02-datadisk-3 | 3 | 0.00 | 0.18 | 0.00 | 0.01 |
+| SQLNPE02-datadisk-4 | 4 | 0.92 | 21.32 | 0.75 | 19.85 |
 
 Findings:
 - LUN 0 is the burst IOPS hotspot with peaks over 163.
@@ -639,11 +639,11 @@ Findings:
 
 Disk Space Findings:
 - All drives are healthy with no capacity concerns.
-- J: (backup) is the most utilized at 36.24% avg but peaks at only 48.37% — much healthier than its counterpart CATORHYPSQLC1.
+- J: (backup) is the most utilized at 36.24% avg but peaks at only 48.37% — much healthier than its counterpart SQLNPE01.
 - C: (OS disk) is comfortably at ~36% with over 80 GiB free.
 - All data disks have substantial free capacity.
 
-### CATORSQLD2
+### SQLNPE03
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -659,31 +659,31 @@ Disk Space Findings:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 11.69 | 44.85 | 0.67 | 2.49 |
-| CATORSQLD2-disk01-New | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
-| catorsqld2-disk02-New | 1 | 0.26 | 0.61 | 0.01 | 0.03 |
-| catorsqld2-disk03-New | 2 | 0.13 | 0.64 | 0.01 | 0.23 |
-| catorsqld2-disk04-New | 3 | 0.01 | 0.07 | 0.00 | 0.02 |
-| catorsqld2-disk05-New | 4 | 0.32 | 6.44 | 0.01 | 0.26 |
+| SQLNPE03-disk01-New | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
+| sqlnpe03-disk02-New | 1 | 0.26 | 0.61 | 0.01 | 0.03 |
+| sqlnpe03-disk03-New | 2 | 0.13 | 0.64 | 0.01 | 0.23 |
+| sqlnpe03-disk04-New | 3 | 0.01 | 0.07 | 0.00 | 0.02 |
+| sqlnpe03-disk05-New | 4 | 0.32 | 6.44 | 0.01 | 0.26 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 11.25 | 114.99 | 0.65 | 5.96 |
-| CATORSQLD2-disk01-New | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
-| catorsqld2-disk02-New | 1 | 0.26 | 0.90 | 0.01 | 0.04 |
-| catorsqld2-disk03-New | 2 | 0.14 | 2.32 | 0.01 | 0.74 |
-| catorsqld2-disk04-New | 3 | 0.01 | 0.52 | 0.00 | 0.08 |
-| catorsqld2-disk05-New | 4 | 0.33 | 6.50 | 0.02 | 0.36 |
+| SQLNPE03-disk01-New | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
+| sqlnpe03-disk02-New | 1 | 0.26 | 0.90 | 0.01 | 0.04 |
+| sqlnpe03-disk03-New | 2 | 0.14 | 2.32 | 0.01 | 0.74 |
+| sqlnpe03-disk04-New | 3 | 0.01 | 0.52 | 0.00 | 0.08 |
+| sqlnpe03-disk05-New | 4 | 0.33 | 6.50 | 0.02 | 0.36 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 11.20 | 114.79 | 0.65 | 5.96 |
-| CATORSQLD2-disk01-New | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
-| catorsqld2-disk02-New | 1 | 0.26 | 0.90 | 0.01 | 0.04 |
-| catorsqld2-disk03-New | 2 | 0.14 | 2.32 | 0.01 | 0.74 |
-| catorsqld2-disk04-New | 3 | 0.01 | 0.52 | 0.00 | 0.08 |
-| catorsqld2-disk05-New | 4 | 0.33 | 6.50 | 0.02 | 0.36 |
+| SQLNPE03-disk01-New | 0 | 0.00 | 0.05 | 0.00 | 0.00 |
+| sqlnpe03-disk02-New | 1 | 0.26 | 0.90 | 0.01 | 0.04 |
+| sqlnpe03-disk03-New | 2 | 0.14 | 2.32 | 0.01 | 0.74 |
+| sqlnpe03-disk04-New | 3 | 0.01 | 0.52 | 0.00 | 0.08 |
+| sqlnpe03-disk05-New | 4 | 0.33 | 6.50 | 0.02 | 0.36 |
 
 Findings:
 - OS disk dominates I/O activity; all data disks are near-idle.
@@ -707,7 +707,7 @@ Disk Space Findings:
 - F:, G:, and H: are essentially empty.
 - This VM has the healthiest disk space profile in the NPE group.
 
-### CATORSQLD5
+### SQLNPE04
 
 #### Aggregate Disk IOPS and Throughput
 | Metric | 7-Day | 30-Day | 90-Day | Trend |
@@ -723,25 +723,25 @@ Disk Space Findings:
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 14.74 | 52.32 | 0.89 | 3.45 |
-| CATORSQLD5-disk02 | 1 | 0.73 | 11.26 | 0.05 | 1.23 |
-| CATORSQLD5-disk03 | 2 | 0.64 | 11.81 | 0.89 | 20.21 |
-| CATORSQLD5-disk05 | 4 | 12.38 | 223.52 | 1.20 | 14.42 |
+| SQLNPE04-disk02 | 1 | 0.73 | 11.26 | 0.05 | 1.23 |
+| SQLNPE04-disk03 | 2 | 0.64 | 11.81 | 0.89 | 20.21 |
+| SQLNPE04-disk05 | 4 | 12.38 | 223.52 | 1.20 | 14.42 |
 
 ##### 30-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 14.73 | 128.35 | 0.88 | 6.64 |
-| CATORSQLD5-disk02 | 1 | 0.73 | 11.26 | 0.05 | 1.23 |
-| CATORSQLD5-disk03 | 2 | 0.64 | 11.98 | 0.89 | 20.22 |
-| CATORSQLD5-disk05 | 4 | 12.13 | 223.52 | 1.20 | 16.58 |
+| SQLNPE04-disk02 | 1 | 0.73 | 11.26 | 0.05 | 1.23 |
+| SQLNPE04-disk03 | 2 | 0.64 | 11.98 | 0.89 | 20.22 |
+| SQLNPE04-disk05 | 4 | 12.13 | 223.52 | 1.20 | 16.58 |
 
 ##### 90-Day
 | Disk | LUN | Avg IOPS | Max IOPS | Avg MB/s | Max MB/s |
 |---|---:|---:|---:|---:|---:|
 | OS Disk | - | 14.68 | 128.36 | 0.88 | 6.64 |
-| CATORSQLD5-disk02 | 1 | 0.73 | 11.24 | 0.05 | 1.22 |
-| CATORSQLD5-disk03 | 2 | 0.64 | 11.82 | 0.89 | 20.16 |
-| CATORSQLD5-disk05 | 4 | 12.09 | 218.44 | 1.19 | 15.97 |
+| SQLNPE04-disk02 | 1 | 0.73 | 11.24 | 0.05 | 1.22 |
+| SQLNPE04-disk03 | 2 | 0.64 | 11.82 | 0.89 | 20.16 |
+| SQLNPE04-disk05 | 4 | 12.09 | 218.44 | 1.19 | 15.97 |
 
 Findings:
 - LUN 4 is the dominant workload disk with 12+ avg IOPS and burst peaks over 223.
@@ -754,145 +754,145 @@ Findings:
 ### CPU Utilization Trends
 | VM | 7-Day Avg | 30-Day Avg | 90-Day Avg | 90-Day Trend |
 |---|---:|---:|---:|---|
-| CATORHYPSQLC1 | 3.02% | 3.01% | 3.01% | Completely stable |
-| CATORHYPSQLD1 | 2.13% | 2.15% | 2.15% | Completely stable |
-| CATORSQLD2 | 7.72% | 7.76% | 7.75% | Completely stable |
-| CATORSQLD5 | 16.39% | 16.04% | 16.06% | Completely stable |
+| SQLNPE01 | 3.02% | 3.01% | 3.01% | Completely stable |
+| SQLNPE02 | 2.13% | 2.15% | 2.15% | Completely stable |
+| SQLNPE03 | 7.72% | 7.76% | 7.75% | Completely stable |
+| SQLNPE04 | 16.39% | 16.04% | 16.06% | Completely stable |
 
 ### Memory Utilization Trends
 | VM | 7-Day Avg | 30-Day Avg | 90-Day Avg | 90-Day Trend | Risk Level |
 |---|---:|---:|---:|---|---|
-| CATORHYPSQLC1 | 84.81% | 82.38% | 82.45% | Stable, consistently high | Medium-High |
-| CATORHYPSQLD1 | 85.21% | 82.73% | 82.79% | Stable, consistently high | Medium-High |
-| CATORSQLD2 | 55.53% | 52.59% | 52.69% | Stable, healthy | Low |
-| CATORSQLD5 | 82.39% | 81.22% | 81.27% | Stable, elevated | High (only 8 GiB) |
+| SQLNPE01 | 84.81% | 82.38% | 82.45% | Stable, consistently high | Medium-High |
+| SQLNPE02 | 85.21% | 82.73% | 82.79% | Stable, consistently high | Medium-High |
+| SQLNPE03 | 55.53% | 52.59% | 52.69% | Stable, healthy | Low |
+| SQLNPE04 | 82.39% | 81.22% | 81.27% | Stable, elevated | High (only 8 GiB) |
 
 ### Peak Performance Analysis (90-Day Max)
 | VM | CPU Peak | Memory Peak | Constraint Risk |
 |---|---:|---:|---|
-| CATORHYPSQLC1 | 9.43% | 93.59% | High (memory spikes) |
-| CATORHYPSQLD1 | 8.52% | 93.74% | High (memory spikes) |
-| CATORSQLD2 | 24.58% | 57.38% | Low |
-| CATORSQLD5 | 49.54% | 91.44% | High (CPU + memory) |
+| SQLNPE01 | 9.43% | 93.59% | High (memory spikes) |
+| SQLNPE02 | 8.52% | 93.74% | High (memory spikes) |
+| SQLNPE03 | 24.58% | 57.38% | Low |
+| SQLNPE04 | 49.54% | 91.44% | High (CPU + memory) |
 
 ### 30-Day Baseline Snapshot
 | VM | Avg CPU | Max CPU | Avg Mem | Max Mem | Health Status |
 |---|---:|---:|---:|---:|---|
-| CATORHYPSQLC1 | 3.01% | 9.43% | 82.38% | 93.59% | Good - Monitor memory |
-| CATORHYPSQLD1 | 2.15% | 8.52% | 82.73% | 93.74% | Good - Monitor memory |
-| CATORSQLD2 | 7.76% | 24.58% | 52.59% | 57.38% | Excellent - Well balanced |
-| CATORSQLD5 | 16.04% | 49.54% | 81.22% | 91.44% | Fair - Watch CPU and memory |
+| SQLNPE01 | 3.01% | 9.43% | 82.38% | 93.59% | Good - Monitor memory |
+| SQLNPE02 | 2.15% | 8.52% | 82.73% | 93.74% | Good - Monitor memory |
+| SQLNPE03 | 7.76% | 24.58% | 52.59% | 57.38% | Excellent - Well balanced |
+| SQLNPE04 | 16.04% | 49.54% | 81.22% | 91.44% | Fair - Watch CPU and memory |
 
 ## Configuration and SLA Reference
 
-### CATORHYPSQL1
+### SQLPRD01
 - VM SKU: Standard_D8s_v3 (8 vCPU, 32 GiB Memory)
 - VM Max IOPS: 12,800 | VM Max Throughput: 192 MB/s
 - OS Disk: StandardSSD_LRS, 127 GB -> 500 IOPS | 100 MB/s
 - Data Disks:
-  - LUN 0: CATORHYPSQL1-disk01, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 1: CATORHYPSQL1-disk02, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
-  - LUN 2: CATORHYPSQL1-disk03, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 3: CATORHYPSQL1-disk04, StandardSSD_LRS, 60 GB -> 500 IOPS | 100 MB/s
-  - LUN 4: CATORHYPSQL1-disk05, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 0: SQLPRD01-disk01, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: SQLPRD01-disk02, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 2: SQLPRD01-disk03, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 3: SQLPRD01-disk04, StandardSSD_LRS, 60 GB -> 500 IOPS | 100 MB/s
+  - LUN 4: SQLPRD01-disk05, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
 - SLA: 99.0% (single VM with Standard SSD disks)
 - Max Downtime/Year: ~87.6 hours
 
-### CATORSQL17
-- Resource Group: RT-CA-PRD-ARG-CATORAP17
+### SQLPRD02
+- Resource Group: Contoso-CA-PRD-ARG-SQLPRD02
 - VM SKU: Standard_B8ms (8 vCPU, 32 GiB Memory)
 - VM Max IOPS: 4,320 | VM Max Throughput: 50 MB/s
 - OS Disk: Premium_LRS, 127 GB -> ~500 IOPS | ~100 MB/s
 - Data Disks:
-  - LUN 0: CATORSQL17-datadisk01, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 1: CATORSQL17-datadisk02, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 2: CATORSQL17-datdisk03, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
-  - LUN 3: CATORSQL17-datadisk04, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
-  - LUN 4: CATORSQL17-datdisk05, Premium_LRS, 64 GB -> 240 IOPS | 50 MB/s
+  - LUN 0: SQLPRD02-datadisk01, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: SQLPRD02-datadisk02, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 2: SQLPRD02-datdisk03, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
+  - LUN 3: SQLPRD02-datadisk04, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
+  - LUN 4: SQLPRD02-datdisk05, Premium_LRS, 64 GB -> 240 IOPS | 50 MB/s
 - SLA: 99.9% (single VM with Premium SSD disks)
 - Max Downtime/Year: ~8.76 hours
 
-### CATORSQL5
-- Resource Group: RT-CA-PRD-ARG-CATORSQL5
+### SQLPRD03
+- Resource Group: Contoso-CA-PRD-ARG-SQLPRD03
 - VM SKU: Standard_D4s_v3 (4 vCPU, 16 GiB Memory)
 - VM Max IOPS: 6,400 | VM Max Throughput: 96 MB/s
 - OS Disk: StandardSSD_LRS, 127 GB -> 500 IOPS | 100 MB/s
 - Data Disks:
-  - LUN 1: CATORSQL5-disk02, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
-  - LUN 2: CATORSQL5-disk03, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 3: CATORSQL5-disk04, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: SQLPRD03-disk02, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 2: SQLPRD03-disk03, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 3: SQLPRD03-disk04, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
 - SLA: 99.0% (single VM with Standard SSD disks)
 - Max Downtime/Year: ~87.6 hours
 
-### CATORSQL6
-- Resource Group: RT-CA-PRD-ARG-CATORSQL6
+### SQLPRD04
+- Resource Group: Contoso-CA-PRD-ARG-SQLPRD04
 - VM SKU: Standard_D4s_v3 (4 vCPU, 16 GiB Memory)
 - VM Max IOPS: 6,400 | VM Max Throughput: 96 MB/s
 - OS Disk: Premium_LRS, 127 GB -> ~500 IOPS | ~100 MB/s
 - Data Disks:
-  - LUN 0: CATORSQL6-disk01, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 1: CATORSQL6-disk02, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
-  - LUN 2: CATORSQL6-disk03, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
-  - LUN 3: CATORSQL6-disk04, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 4: CATORSQL6-disk05, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 0: SQLPRD04-disk01, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: SQLPRD04-disk02, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
+  - LUN 2: SQLPRD04-disk03, Premium_LRS, 256 GB -> 1,100 IOPS | 125 MB/s
+  - LUN 3: SQLPRD04-disk04, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 4: SQLPRD04-disk05, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
 - SLA: 99.0% (single VM with mixed disk types; Standard SSD portion limits SLA)
 - Max Downtime/Year: ~87.6 hours
 
-### CATORHYPSQLC1
-- Resource Group: RT-CA-NPE-ARG-CATORHYPSQLC1
-- Subscription: RioTinto-CA-Non-Production
+### SQLNPE01
+- Resource Group: Contoso-CA-NPE-ARG-SQLNPE01
+- Subscription: Contoso-CA-Non-Production
 - VM SKU: Standard_D8s_v3 (8 vCPU, 32 GiB Memory)
 - VM Max IOPS: 12,800 | VM Max Throughput: 192 MB/s
 - OS Disk: StandardSSD_LRS
 - Data Disks:
-  - LUN 0: CATORHYPSQLC1-SQL-DATA-F, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 1: CATORHYPSQLC1-SQL-LOGS-G, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 2: CATORHYPSQLC1-SQL-TEMP-H, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 3: CATORHYPSQLC1-SQL-INDEX-I, StandardSSD_LRS, 64 GB -> 500 IOPS | 100 MB/s
-  - LUN 4: CATORHYPSQLC1-SQL-BACKUP-J, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 0: SQLNPE01-SQL-DATA-F, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: SQLNPE01-SQL-LOGS-G, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 2: SQLNPE01-SQL-TEMP-H, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 3: SQLNPE01-SQL-INDEX-I, StandardSSD_LRS, 64 GB -> 500 IOPS | 100 MB/s
+  - LUN 4: SQLNPE01-SQL-BACKUP-J, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
 - SLA: 99.0% (single VM with Standard SSD disks)
 - Max Downtime/Year: ~87.6 hours
 
-### CATORHYPSQLD1
-- Resource Group: RT-CA-NPE-ARG-CATORHYPSQLD1
-- Subscription: RioTinto-CA-Non-Production
+### SQLNPE02
+- Resource Group: Contoso-CA-NPE-ARG-SQLNPE02
+- Subscription: Contoso-CA-Non-Production
 - VM SKU: Standard_D8s_v3 (8 vCPU, 32 GiB Memory)
 - VM Max IOPS: 12,800 | VM Max Throughput: 192 MB/s
 - OS Disk: StandardSSD_LRS
 - Data Disks:
-  - LUN 0: CATORHYPSQLD1-datadisk-0, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 1: CATORHYPSQLD1-datadisk-1, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 2: CATORHYPSQLD1-datadisk-2, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 3: CATORHYPSQLD1-datadisk-3, StandardSSD_LRS, 64 GB -> 500 IOPS | 100 MB/s
-  - LUN 4: CATORHYPSQLD1-datadisk-4, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 0: SQLNPE02-datadisk-0, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: SQLNPE02-datadisk-1, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 2: SQLNPE02-datadisk-2, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 3: SQLNPE02-datadisk-3, StandardSSD_LRS, 64 GB -> 500 IOPS | 100 MB/s
+  - LUN 4: SQLNPE02-datadisk-4, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
 - SLA: 99.0% (single VM with Standard SSD disks)
 - Max Downtime/Year: ~87.6 hours
 
-### CATORSQLD2
+### SQLNPE03
 - Resource Group: RT-TOR-NPE-ARG-CRYSTALUPGRADE
-- Subscription: RioTinto-CA-Non-Production
+- Subscription: Contoso-CA-Non-Production
 - VM SKU: Standard_D4s_v3 (4 vCPU, 16 GiB Memory)
 - VM Max IOPS: 6,400 | VM Max Throughput: 96 MB/s
 - OS Disk: StandardSSD_LRS
 - Data Disks:
-  - LUN 0: CATORSQLD2-disk01-New, StandardSSD_LRS, 512 GB -> 500 IOPS | 100 MB/s
-  - LUN 1: catorsqld2-disk02-New, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
-  - LUN 2: catorsqld2-disk03-New, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
-  - LUN 3: catorsqld2-disk04-New, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 4: catorsqld2-disk05-New, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 0: SQLNPE03-disk01-New, StandardSSD_LRS, 512 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: sqlnpe03-disk02-New, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 2: sqlnpe03-disk03-New, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 3: sqlnpe03-disk04-New, StandardSSD_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 4: sqlnpe03-disk05-New, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
 - SLA: 99.0% (single VM with Standard SSD disks)
 - Max Downtime/Year: ~87.6 hours
 
-### CATORSQLD5
-- Resource Group: RT-CA-NPE-ARG-CATORSQLD5
-- Subscription: RioTinto-CA-Non-Production
+### SQLNPE04
+- Resource Group: Contoso-CA-NPE-ARG-SQLNPE04
+- Subscription: Contoso-CA-Non-Production
 - VM SKU: Standard_D2s_v3 (2 vCPU, 8 GiB Memory)
 - VM Max IOPS: 3,200 | VM Max Throughput: 48 MB/s
 - OS Disk: StandardSSD_LRS
 - Data Disks:
-  - LUN 1: CATORSQLD5-disk02, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
-  - LUN 2: CATORSQLD5-disk03, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
-  - LUN 4: CATORSQLD5-disk05, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 1: SQLNPE04-disk02, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
+  - LUN 2: SQLNPE04-disk03, StandardSSD_LRS, 256 GB -> 500 IOPS | 100 MB/s
+  - LUN 4: SQLNPE04-disk05, Premium_LRS, 128 GB -> 500 IOPS | 100 MB/s
 - SLA: 99.0% (single VM with mixed disk types; Standard SSD portion limits SLA)
 - Max Downtime/Year: ~87.6 hours
 
