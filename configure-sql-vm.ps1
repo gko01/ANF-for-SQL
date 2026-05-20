@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Configure SQLPRD01SIM — disk layout, SQL Server paths, TempDB, test database.
   Runs inside the VM via az vm run-command (called by deploy-sqlprd01-sim.ps1)
