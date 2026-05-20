@@ -15,6 +15,9 @@ Scope: Architecture · Migration · Disaster Recovery · Operations · Technical
 4. [Disaster Recovery](#4-disaster-recovery)
 5. [Daily Operations & Troubleshooting](#5-daily-operations--troubleshooting)
 6. [Technical Validation Test Plan](#6-technical-validation-test-plan)
+- [Appendix A: Cost Comparison Estimate](#appendix-a-cost-comparison-estimate)
+- [Appendix B: Key Reference Links](#appendix-b-key-reference-links)
+- [Appendix C: Test VM Provisioning Scripts](#appendix-c-test-vm-provisioning-scripts)
 
 ---
 
@@ -645,25 +648,73 @@ Resolution:
 
 ### 6.1 Test Objectives
 
-| # | Objective | Success Criterion |
-|---|---|---|
-| T1 | Confirm SQL Server connects and operates on ANF SMB3 volumes | All databases ONLINE; no errors in SQL error log |
-| T2 | Performance parity or improvement vs baseline disks | P95 query response time within 10% of baseline; key waits (PAGEIOLATCH, WRITELOG) not degraded |
-| T3 | Snapshot creation and restore (application-consistent) | Snapshot created in < 5 seconds; restore completes without data loss |
-| T4 | ANF Cross-Zone Replication failover | DR volume mountable and SQL recoverable within 30 minutes |
-| T5 | Capacity and throughput scaling (no downtime) | Volume quota expansion AND throughput rebalancing both take effect within 60 seconds; no SQL interruption |
-| T6 | ANF Backup and restore (long-term) | Backup created; restore to new volume succeeds; data integrity validated |
-| T7 | SQL Server Always On AG viability (if AG planned) | AG can use ANF SMB3 for shared witness or shared storage for FCI |
+**Test priority rationale:** SQLPRD01's observed peak throughput tops out at 36 MB/s (backup) and 18 MB/s (TempDB) — well below the 100 MB/s per-disk StandardSSD cap and the 192 MB/s VM NIC ceiling. ANF volumes provisioned at 32 MiB/s each already cover the real workload. A raw throughput benchmark against ANF will not surface meaningful differentiation from current disks at these I/O levels. The primary test value lies in **migration procedure validation, operational manageability, snapshot/restore correctness, and CZR failover reliability** — these are the areas where ANF changes the operational model substantially.
+
+| # | Priority | Objective | Success Criterion |
+|---|---|---|---|
+| T1 | **High** | Confirm SQL Server connects and operates on ANF SMB3 volumes | All databases ONLINE; no errors in SQL error log |
+| T2 | Low | Latency regression check — confirm ANF does not degrade SQL wait stats vs disk baseline | Key waits (PAGEIOLATCH, WRITELOG) not elevated; avg I/O latency within 2 ms; no throughput benchmarking needed at this workload level |
+| T3 | **High** | Snapshot creation and restore (application-consistent) | Snapshot created in < 5 seconds; restore completes without data loss |
+| T4 | **High** | ANF Cross-Zone Replication failover | DR volume mountable and SQL recoverable within 30 minutes |
+| T5 | **High** | Capacity and throughput scaling (no downtime) | Volume quota expansion AND throughput rebalancing both take effect within 60 seconds; no SQL interruption |
+| T6 | Medium | ANF Backup and restore (long-term) | Backup created; restore to new volume succeeds; data integrity validated |
+| T7 | **High** | Operational validation — monitoring, alerts, dynamic throughput rebalancing | Alerts fire correctly; tier change online; snapshot cleanup functional |
 
 ### 6.2 Test Environment
 
 Use **SQLNPE01 (NPE)** as the validation target — it is the direct Non-Production equivalent of SQLPRD01 (same SKU: D8s_v3, same disk layout, named volumes confirming SQL role mapping). This ensures production is not impacted during testing.
 
 ```
-Test VM: SQLNPE01 (Standard_D8s_v3, NPE)
-ANF test account: anfacct-contoso-npe (same ANF setup as target production design)
-Test volumes: npe-sql-data, npe-sql-logs, npe-sql-tempdb, npe-sql-index, npe-sql-backup
-Duration: 4 weeks (1 week setup, 1 week functional/perf, 1 week DR, 1 week ops)
+Test VM:      SQLNPE01 (Standard_D8s_v3, NPE)
+ANF account:  anfacct-contoso-npe
+Pool:         sql-pool-npe  (Standard service level, Manual QoS, 4 TiB)
+Duration:     4 weeks (1 week setup, 1 week migration + T3, 1 week T4/T5/T6, 1 week T7 + cutover rehearsal)
+```
+
+**Cost-minimised test volume design:** ANF Manual QoS decouples throughput from volume quota. Test volumes are provisioned at the minimum quota (100 GiB each) while carrying throughput assignments that match the production targets. This keeps the pool at the ANF minimum size (4 TiB) and minimises snapshot delta storage. The Standard service level is used for the test pool — it is less expensive per TiB than Flexible and, with Manual QoS, still allows throughput to be set independently per volume. The same T5 and T7 operations (quota expand, throughput rebalance) are fully exercisable on a Standard Manual QoS pool.
+
+| Test Volume | Quota (test) | Quota (production target) | Throughput (MiB/s) | Role |
+|---|---:|---:|---:|---|
+| npe-sql-data | 100 GiB | 512 GiB | 32 | SQL data files |
+| npe-sql-logs | 100 GiB | 256 GiB | 32 | Transaction logs |
+| npe-sql-tempdb | 100 GiB | 128 GiB | 32 | TempDB |
+| npe-sql-index | 100 GiB | 128 GiB | 8 | Index filegroup |
+| npe-sql-backup | 100 GiB | 1,024 GiB | 16 | Backups (boost to 80 MiB/s for T5) |
+| **Pool total** | **500 GiB used of 1 TiB** | **4 TiB** | **120 MiB/s** | Standard Manual QoS |
+
+**Provision test pool and volumes:**
+
+```bash
+# Create test capacity pool — Standard service level, Manual QoS (cheaper than Flexible for test)
+az netappfiles pool create \
+  --resource-group Contoso-CA-NPE-ANF-RG \
+  --location canadacentral \
+  --account-name anfacct-contoso-npe \
+  --pool-name sql-pool-npe \
+  --size 1 \
+  --service-level Standard \
+  --qos-type Manual
+
+# Create volumes at minimum quota (100 GiB) with production-matching throughput
+for vol in \
+  "npe-sql-data:32" \
+  "npe-sql-logs:32" \
+  "npe-sql-tempdb:32" \
+  "npe-sql-index:8" \
+  "npe-sql-backup:16"; do
+  name="${vol%%:*}"; tput="${vol##*:}"
+  az netappfiles volume create \
+    --resource-group Contoso-CA-NPE-ANF-RG \
+    --location canadacentral \
+    --account-name anfacct-contoso-npe \
+    --pool-name sql-pool-npe \
+    --name "$name" \
+    --usage-threshold 100 \
+    --throughput-mibps "$tput" \
+    --protocol-types CIFS \
+    --subnet-id /subscriptions/<sub-id>/resourceGroups/.../subnets/anf-delegated
+done
+# Total: 500 GiB provisioned of a 1 TiB pool (ANF minimum); 120 MiB/s assigned — same throughput profile as production
 ```
 
 ### 6.3 Test Cases
@@ -679,44 +730,43 @@ Duration: 4 weeks (1 week setup, 1 week functional/perf, 1 week DR, 1 week ops)
 | T1.5 | Restart SQL Server service; confirm databases auto-mount | All databases return ONLINE after service restart |
 | T1.6 | Simulate VM restart; confirm SMB reconnects automatically | SQL Server reconnects to ANF shares on boot via Persistent DFS mapping |
 
-#### T2 — Performance Validation
+#### T2 — Latency Regression Check (Low Priority)
 
-**Baseline measurement** (before migration, on existing disks):
+> **Why not a full throughput benchmark:** SQLPRD01's real-world I/O peaks at 36 MB/s (J: backup) and 306 IOPS (H: TempDB). Each StandardSSD disk caps at 100 MB/s / 500 IOPS; the VM NIC caps at 192 MB/s total. ANF volumes at 32 MiB/s each already exceed the per-volume observed maximums. A DiskSpd synthetic workload would push both disk and ANF past the real operating point, producing a number that doesn't reflect production behavior. The test below confirms no latency regression at realistic I/O levels — that is the only meaningful question here.
 
-```powershell
-# Run DiskSpd against existing disk paths
-.\diskspd.exe -b8K -d300 -o32 -t4 -r -w30 -L -Z1G F:\testfile.dat > baseline_disk_perf.txt
-.\diskspd.exe -b64K -d300 -o4 -t1 -s -w100 -L -Z1G G:\testfile.dat > baseline_log_perf.txt
-```
-
-**Post-migration measurement** (on ANF volumes, same parameters):
-
-```powershell
-.\diskspd.exe -b8K -d300 -o32 -t4 -r -w30 -L -Z1G \\ANFSMB01\npe-sql-data\testfile.dat > anf_data_perf.txt
-.\diskspd.exe -b64K -d300 -o4 -t1 -s -w100 -L -Z1G \\ANFSMB01\npe-sql-logs\testfile.dat > anf_log_perf.txt
-```
-
-**SQL Server workload simulation:**
+**Step 1: Capture wait stats before and after migration (same query used in Section 3.1 Step 2):**
 
 ```sql
--- Simulate read-heavy OLTP workload (run for 30 minutes)
--- Use HammerDB or custom loop to simulate concurrent sessions
-
--- Capture I/O stats before and after
-SELECT
-    DB_NAME(vfs.database_id) AS db,
-    mf.physical_name,
-    vfs.io_stall_read_ms / NULLIF(vfs.num_of_reads, 0) AS avg_read_ms,
-    vfs.io_stall_write_ms / NULLIF(vfs.num_of_writes, 0) AS avg_write_ms
-FROM sys.dm_io_virtual_file_stats(NULL, NULL) vfs
-JOIN sys.master_files mf ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id;
+-- Run immediately after ANF migration; compare to pre-migration baseline file
+SELECT wait_type,
+       waiting_tasks_count,
+       wait_time_ms,
+       signal_wait_time_ms
+FROM   sys.dm_os_wait_stats
+WHERE  wait_type IN (
+       'PAGEIOLATCH_SH','PAGEIOLATCH_EX','WRITELOG',
+       'IO_COMPLETION','BACKUPIO')
+ORDER BY wait_time_ms DESC;
 ```
 
-**Pass criteria:**
-- Random 8K read latency: ≤ 2 ms (P95)
-- Sequential write latency (log): ≤ 1.5 ms (P95)
-- IOPS: at least equal to current disk observed peaks (306 IOPS max observed)
-- Throughput: at least equal to current peak (36 MB/s max observed)
+**Step 2: Capture per-file average I/O latency:**
+
+```sql
+SELECT DB_NAME(vfs.database_id) AS db,
+       mf.physical_name,
+       vfs.io_stall_read_ms  / NULLIF(vfs.num_of_reads,  0) AS avg_read_ms,
+       vfs.io_stall_write_ms / NULLIF(vfs.num_of_writes, 0) AS avg_write_ms
+FROM   sys.dm_io_virtual_file_stats(NULL, NULL) vfs
+JOIN   sys.master_files mf
+       ON vfs.database_id = mf.database_id AND vfs.file_id = mf.file_id;
+```
+
+**Pass criteria (regression check only):**
+- `PAGEIOLATCH_SH` / `PAGEIOLATCH_EX` wait time: not higher than pre-migration baseline
+- `WRITELOG` wait time: not higher than pre-migration baseline
+- Average read latency per file: ≤ 2 ms
+- Average write latency per file: ≤ 2 ms
+- No `BACKUPIO` increase (backup runs to sql-backup volume at 16 MiB/s; observed peak was 36 MB/s — well within allocation)
 
 #### T3 — Snapshot: Create and Restore
 
@@ -820,7 +870,7 @@ az netappfiles volume replication re-initialize \
 | Test | Pass Condition |
 |---|---|
 | T1 Functional | All databases ONLINE; DBCC 0 errors; auto-reconnect on restart |
-| T2 Performance | Latency ≤ 2 ms (data), ≤ 1.5 ms (log); IOPS ≥ observed peaks; wait stats not degraded |
+| T2 Latency check *(Low)* | Wait stats (PAGEIOLATCH, WRITELOG) not elevated vs pre-migration baseline; avg I/O latency ≤ 2 ms per file |
 | T3 Snapshot | Snapshot < 5 sec; restore < 5 min; DBCC 0 errors |
 | T4 CZR Failover | RTO ≤ 30 min; RPO ≤ 20 min; data accessible on DR VM |
 | T5 Scale | Quota expansion AND throughput rebalancing < 60 sec; zero SQL downtime; Flexible pool budget enforcement confirmed |
@@ -832,9 +882,9 @@ az netappfiles volume replication re-initialize \
 | Week | Activity |
 |---|---|
 | **Week 1** | ANF NPE infrastructure setup; AD integration; volume creation; T1 functional tests |
-| **Week 2** | T2 performance baseline vs ANF; T5 capacity scaling; T7 operational checks |
-| **Week 3** | T3 snapshot create/restore; T6 ANF backup; T4 CZR setup and failover drill |
-| **Week 4** | Full cutover rehearsal on SQLNPE01; document results; production readiness sign-off |
+| **Week 2** | Migration rehearsal on SQLNPE01 (Section 3.3 Phases A–D); T3 snapshot create/restore; T2 latency regression check |
+| **Week 3** | T4 CZR setup and failover drill; T5 capacity/throughput scaling; T6 ANF backup |
+| **Week 4** | T7 operational checks; full cutover rehearsal on SQLNPE01; document results; production readiness sign-off |
 | **Week 5+** | Production migration of SQLPRD01 using validated runbook |
 
 ### 6.6 Production Readiness Gate
@@ -924,3 +974,538 @@ ANF's consistent low-latency I/O over SMB3 removes a common reason to over-provi
 - [ANF Backup](https://learn.microsoft.com/en-us/azure/azure-netapp-files/backup-introduction)
 - [DiskSpd download](https://github.com/microsoft/diskspd)
 - [HammerDB for SQL Server load testing](https://www.hammerdb.com/)
+
+---
+
+## Appendix C: Test VM Provisioning Scripts
+
+These two scripts provision and configure a self-contained SQLPRD01 simulation VM in Australia East (`australiaeast`) for use in the Section 6 test plan. The VM uses the same `Standard_D8s_v3` SKU, the same five `StandardSSD_LRS` data disks, the same LUN-to-drive-letter mapping, and SQL Server 2022 Developer — but uses **32 GB disks** for each data drive instead of the production sizes, to minimise test cost. Production disk sizes are documented in Section 2.1.
+
+**Files:** `deploy-sqlprd01-sim.ps1` and `configure-sql-vm.ps1` (place both in the same folder).
+
+**To run:**
+
+```powershell
+# Minimal
+.\deploy-sqlprd01-sim.ps1
+
+# Recommended — restrict RDP to your IP
+.\deploy-sqlprd01-sim.ps1 -AllowRdpFromCIDR "203.0.113.10/32" -SubscriptionId "<your-sub-id>"
+```
+
+**After deployment (~15–20 min):**
+
+| Resource | Detail |
+|---|---|
+| VM | `SQLPRD01SIM`, `Standard_D8s_v3`, Australia East |
+| SQL Server | 2022 Developer edition (pre-installed via marketplace image) |
+| Drive layout | Same LUN order and drive letters as SQLPRD01; **test disks: 32 GB each** (production sizes: Section 2.1) |
+| ANF subnet | `10.10.2.0/28` delegated — ready for Section 3.2 ANF infrastructure setup |
+| TestDB | Pre-created with data on F:, logs on G:, index filegroup on I: — ready for T3 migration rehearsal and T5 snapshot/restore |
+
+**Drive layout (test VM — 32 GB data disks; production sizes in Section 2.1):**
+
+| Drive | Role | Size | SKU | LUN | Disk name |
+|---|---|---:|---|---:|---|
+| C: | OS | 127 GB | StandardSSD_LRS | — | SQLPRD01SIM-osdisk |
+| D: | Azure temp disk | — | Ephemeral | — | — |
+| F: | SQL Data | 32 GB | StandardSSD_LRS | 0 | SQLPRD01SIM-disk01 |
+| G: | SQL Logs | 32 GB | StandardSSD_LRS | 2 | SQLPRD01SIM-disk03 |
+| H: | SQL TempDB | 32 GB | StandardSSD_LRS | 4 | SQLPRD01SIM-disk05 |
+| I: | SQL Index | 32 GB | StandardSSD_LRS | 3 | SQLPRD01SIM-disk04 |
+| J: | SQL Backup | 32 GB | StandardSSD_LRS | 1 | SQLPRD01SIM-disk02 |
+
+**Clean up when done:**
+
+```bash
+az group delete --name SQLPRD01-SIM-RG --yes --no-wait
+```
+
+---
+
+### `deploy-sqlprd01-sim.ps1`
+
+Provisions all Azure infrastructure: resource group, VNet (with ANF-delegated subnet), NSG, public IP, NIC, SQL Server 2022 Developer VM, and all five data disks. Calls `configure-sql-vm.ps1` inside the VM via `az vm run-command`.
+
+```powershell
+<#
+.SYNOPSIS
+  Deploy a SQLPRD01 simulation VM in Australia East for ANF test plan (README Section 6).
+  Matches: Standard_D8s_v3, 5x StandardSSD_LRS disks, SQL Server 2022 Developer.
+
+.REQUIREMENTS
+  - Azure CLI (az) logged in: az login
+  - Contributor access on target subscription
+  - configure-sql-vm.ps1 in the same directory as this script
+#>
+
+param(
+    [string]$SubscriptionId = "",           # leave blank to use current subscription
+    [string]$AllowRdpFromCIDR = "*"         # SECURITY: restrict to your IP, e.g. "203.0.113.10/32"
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+# ── Configuration ─────────────────────────────────────────────────────────────
+$location    = "australiaeast"
+$rg          = "SQLPRD01-SIM-RG"
+$vmName      = "SQLPRD01SIM"
+$vmSize      = "Standard_D8s_v3"
+$adminUser   = "sqladmin"
+$sqlImage    = "MicrosoftSQLServer:sql2022-ws2022:sqldev-gen2:latest"
+$diskSku     = "StandardSSD_LRS"
+$osDiskSku   = "StandardSSD_LRS"
+$vnetName    = "sqlsim-vnet"
+$vmSubnet    = "vm-subnet"
+$anfSubnet   = "anf-delegated"    # /28 delegated — ready for Section 3.2 ANF setup
+$nsgName     = "sqlsim-nsg"
+$pipName     = "$vmName-pip"
+$nicName     = "$vmName-nic"
+
+# ── Validate configure script exists ──────────────────────────────────────────
+$configScript = Join-Path $PSScriptRoot "configure-sql-vm.ps1"
+if (-not (Test-Path $configScript)) {
+    throw "configure-sql-vm.ps1 not found alongside this script. Cannot proceed."
+}
+
+# ── Password prompt ────────────────────────────────────────────────────────────
+$secPass = Read-Host "Enter VM admin password (min 12 chars, upper+lower+digit+symbol)" -AsSecureString
+$adminPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
+)
+
+# Validate password complexity (Azure requirement)
+if ($adminPassword.Length -lt 12) { throw "Password must be at least 12 characters." }
+
+# ── Subscription ───────────────────────────────────────────────────────────────
+if ($SubscriptionId) {
+    az account set --subscription $SubscriptionId
+}
+Write-Host "Using subscription: $(az account show --query name -o tsv)"
+
+# ── 1. Resource Group ──────────────────────────────────────────────────────────
+Write-Host "`n[1/8] Creating resource group $rg in $location..."
+az group create --name $rg --location $location --tags "Purpose=SQLPRD01-Simulation" "Project=ANF-Evaluation" | Out-Null
+
+# ── 2. VNet + Subnets ─────────────────────────────────────────────────────────
+Write-Host "[2/8] Creating VNet and subnets..."
+az network vnet create `
+    --resource-group $rg `
+    --name $vnetName `
+    --location $location `
+    --address-prefix "10.10.0.0/16" | Out-Null
+
+# VM subnet
+az network vnet subnet create `
+    --resource-group $rg `
+    --vnet-name $vnetName `
+    --name $vmSubnet `
+    --address-prefix "10.10.1.0/24" | Out-Null
+
+# ANF delegated subnet (/28 minimum — required for ANF volumes in Section 3.2)
+az network vnet subnet create `
+    --resource-group $rg `
+    --vnet-name $vnetName `
+    --name $anfSubnet `
+    --address-prefix "10.10.2.0/28" `
+    --delegations "Microsoft.NetApp/volumes" | Out-Null
+
+Write-Host "  VM subnet:  10.10.1.0/24"
+Write-Host "  ANF subnet: 10.10.2.0/28 (delegated — ready for Section 3.2)"
+
+# ── 3. NSG ────────────────────────────────────────────────────────────────────
+Write-Host "[3/8] Creating NSG..."
+az network nsg create --resource-group $rg --name $nsgName --location $location | Out-Null
+
+# RDP — restricted to $AllowRdpFromCIDR (default * — tighten for production)
+az network nsg rule create `
+    --resource-group $rg --nsg-name $nsgName `
+    --name "AllowRDP" --priority 1000 --protocol Tcp --direction Inbound `
+    --source-address-prefix $AllowRdpFromCIDR --source-port-range "*" `
+    --destination-address-prefix "*" --destination-port-range 3389 `
+    --access Allow | Out-Null
+
+# SQL 1433 — VNet-scoped only
+az network nsg rule create `
+    --resource-group $rg --nsg-name $nsgName `
+    --name "AllowSQL-VNet" --priority 1010 --protocol Tcp --direction Inbound `
+    --source-address-prefix "VirtualNetwork" --source-port-range "*" `
+    --destination-address-prefix "*" --destination-port-range 1433 `
+    --access Allow | Out-Null
+
+if ($AllowRdpFromCIDR -eq "*") {
+    Write-Warning "RDP is open to the internet. Pass -AllowRdpFromCIDR <your-IP/32> to restrict."
+}
+
+# ── 4. Public IP + NIC ────────────────────────────────────────────────────────
+Write-Host "[4/8] Creating public IP and NIC..."
+az network public-ip create `
+    --resource-group $rg --name $pipName --location $location `
+    --sku Standard --allocation-method Static --zone 1 | Out-Null
+
+az network nic create `
+    --resource-group $rg --name $nicName --location $location `
+    --vnet-name $vnetName --subnet $vmSubnet `
+    --network-security-group $nsgName `
+    --public-ip-address $pipName | Out-Null
+
+# ── 5. VM Creation ────────────────────────────────────────────────────────────
+Write-Host "[5/8] Creating VM with SQL Server 2022 Developer image (10-15 min)..."
+az vm create `
+    --resource-group $rg `
+    --name $vmName `
+    --location $location `
+    --size $vmSize `
+    --image $sqlImage `
+    --os-disk-name "$vmName-osdisk" `
+    --os-disk-size-gb 127 `
+    --storage-sku "$osDiskSku" `
+    --nics $nicName `
+    --admin-username $adminUser `
+    --admin-password $adminPassword `
+    --enable-agent true `
+    --tags "Role=SQLPRD01-Simulation" | Out-Null
+
+Write-Host "  VM created. Waiting for agent to become ready..."
+Start-Sleep -Seconds 60
+
+# ── 6. Attach 5 Data Disks (matching SQLPRD01 spec exactly) ──────────────────
+Write-Host "[6/8] Attaching data disks..."
+#  LUN  Size    Drive  Role
+#   0   128 GB   F:    SQL Data   (SQLPRD01-disk01)
+#   1   256 GB   J:    SQL Backup (SQLPRD01-disk02)
+#   2   128 GB   G:    SQL Logs   (SQLPRD01-disk03)
+#   3    60 GB   I:    SQL Index  (SQLPRD01-disk04)
+#   4   128 GB   H:    SQL Misc/TempDB (SQLPRD01-disk05)
+
+$disks = @(
+    @{ Lun = 0; Name = "$vmName-disk01"; SizeGB = 32 }
+    @{ Lun = 1; Name = "$vmName-disk02"; SizeGB = 32 }
+    @{ Lun = 2; Name = "$vmName-disk03"; SizeGB = 32 }
+    @{ Lun = 3; Name = "$vmName-disk04"; SizeGB = 32 }
+    @{ Lun = 4; Name = "$vmName-disk05"; SizeGB = 32 }
+)
+
+foreach ($disk in $disks) {
+    Write-Host "  LUN $($disk.Lun): $($disk.Name) ($($disk.SizeGB) GB $diskSku)"
+    az vm disk attach `
+        --resource-group $rg `
+        --vm-name $vmName `
+        --name $disk.Name `
+        --new `
+        --size-gb $disk.SizeGB `
+        --sku $diskSku `
+        --lun $disk.Lun | Out-Null
+}
+
+# ── 7. In-VM Configuration via Run Command ────────────────────────────────────
+Write-Host "[7/8] Running in-VM configuration (disk init + SQL paths)..."
+Write-Host "  Reading configure-sql-vm.ps1..."
+
+$scriptContent = Get-Content $configScript -Raw -Encoding UTF8
+
+# az vm run-command invoke accepts inline script content via --scripts
+# Use --command-id RunPowerShellScript
+az vm run-command invoke `
+    --resource-group $rg `
+    --name $vmName `
+    --command-id RunPowerShellScript `
+    --scripts $scriptContent
+
+# ── 8. Output Connection Info ─────────────────────────────────────────────────
+Write-Host "[8/8] Retrieving connection details..."
+$pip = az network public-ip show --resource-group $rg --name $pipName --query "ipAddress" -o tsv
+
+Write-Host "`n╔══════════════════════════════════════════════════════════╗"
+Write-Host "  SQLPRD01 Simulation VM — Ready"
+Write-Host "╚══════════════════════════════════════════════════════════╝"
+Write-Host "  VM Name       : $vmName"
+Write-Host "  Region        : $location (Australia East)"
+Write-Host "  Size          : $vmSize (8 vCPU, 32 GiB — matches SQLPRD01)"
+Write-Host "  Public IP     : $pip"
+Write-Host "  RDP           : mstsc /v:$pip"
+Write-Host "  Admin user    : $adminUser"
+Write-Host "  SQL Instance  : $vmName (default instance, Windows auth)"
+Write-Host "  SQL TCP port  : 1433 (VNet-scoped; RDP in for management)"
+Write-Host ""
+Write-Host "  Drive layout (test VM — 32 GB data disks; production sizes in Section 2.1):"
+Write-Host "    C: — OS (127 GB StandardSSD)"
+Write-Host "    D: — Temp disk (Azure ephemeral)"
+Write-Host "    F: — SQL Data     32 GB StandardSSD  LUN 0  ($vmName-disk01)"
+Write-Host "    G: — SQL Logs     32 GB StandardSSD  LUN 2  ($vmName-disk03)"
+Write-Host "    H: — SQL TempDB   32 GB StandardSSD  LUN 4  ($vmName-disk05)"
+Write-Host "    I: — SQL Index    32 GB StandardSSD  LUN 3  ($vmName-disk04)"
+Write-Host "    J: — SQL Backup   32 GB StandardSSD  LUN 1  ($vmName-disk02)"
+Write-Host ""
+Write-Host "  ANF subnet ready: 10.10.2.0/28 (delegated) — use for Section 3.2"
+Write-Host ""
+Write-Host "  To clean up: az group delete --name $rg --yes --no-wait"
+```
+
+---
+
+### `configure-sql-vm.ps1`
+
+Runs inside the VM (called automatically by `deploy-sqlprd01-sim.ps1`, or re-run manually over RDP). Initializes all five disks with correct GPT partitions and 64 KiB NTFS allocation units, assigns drive letters in SQLPRD01 order, grants `NT SERVICE\MSSQLSERVER` access to each directory, configures SQL Server default paths, moves TempDB to H:, sets max server memory to 28 GiB, and creates `TestDB` with the data/log/index file layout ready for T3 migration rehearsal and T5 snapshot/restore validation.
+
+```powershell
+<#
+.SYNOPSIS
+  Configure SQLPRD01SIM — disk layout, SQL Server paths, TempDB, test database.
+  Runs inside the VM via az vm run-command (called by deploy-sqlprd01-sim.ps1)
+  or manually over RDP.
+  Matches SQLPRD01 production disk layout exactly.
+#>
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+function Write-Step { param($n, $msg) Write-Host "`n[$n] $msg" -ForegroundColor Cyan }
+
+# ── 1. Wait for all 5 data disks to appear ────────────────────────────────────
+Write-Step "1/6" "Waiting for 5 RAW data disks..."
+
+$maxWait = 120
+$elapsed = 0
+do {
+    $rawDisks = Get-Disk | Where-Object { $_.PartitionStyle -eq 'RAW' } | Sort-Object Number
+    if ($rawDisks.Count -eq 5) { break }
+    Start-Sleep -Seconds 10
+    $elapsed += 10
+    Write-Host "  Found $($rawDisks.Count)/5 RAW disks — waiting ($elapsed s)..."
+} while ($elapsed -lt $maxWait)
+
+if ($rawDisks.Count -ne 5) {
+    throw "Expected 5 RAW disks but found $($rawDisks.Count) after ${maxWait}s. Check disk attachment."
+}
+
+# ── 2. Initialize disks and assign drive letters ───────────────────────────────
+Write-Step "2/6" "Initializing disks and assigning drive letters..."
+#
+# Azure presents data disks sorted by LUN in disk-number order (after OS=0 and Temp=1).
+# Sorted RAW disks map to LUNs 0-4 in order:
+#   Index 0  →  LUN 0, 32 GB  →  F: SQLData
+#   Index 1  →  LUN 1, 32 GB  →  J: SQLBackup
+#   Index 2  →  LUN 2, 32 GB  →  G: SQLLogs
+#   Index 3  →  LUN 3, 32 GB  →  I: SQLIndex
+#   Index 4  →  LUN 4, 32 GB  →  H: SQLTempDB
+
+$driveMap = @(
+    [PSCustomObject]@{ Letter = 'F'; Label = 'SQLData';   ExpectedGB = 32 }   # LUN 0
+    [PSCustomObject]@{ Letter = 'J'; Label = 'SQLBackup'; ExpectedGB = 32 }   # LUN 1
+    [PSCustomObject]@{ Letter = 'G'; Label = 'SQLLogs';   ExpectedGB = 32 }   # LUN 2
+    [PSCustomObject]@{ Letter = 'I'; Label = 'SQLIndex';  ExpectedGB = 32 }   # LUN 3
+    [PSCustomObject]@{ Letter = 'H'; Label = 'SQLTempDB'; ExpectedGB = 32 }   # LUN 4
+)
+
+for ($i = 0; $i -lt $rawDisks.Count; $i++) {
+    $disk  = $rawDisks[$i]
+    $drive = $driveMap[$i]
+    $diskGB = [math]::Round($disk.Size / 1GB, 0)
+
+    if ($diskGB -ne $drive.ExpectedGB) {
+        Write-Warning "Disk $($disk.Number): expected $($drive.ExpectedGB) GB, got $diskGB GB. Check LUN order."
+    }
+
+    Write-Host "  Disk $($disk.Number) ($diskGB GB) → $($drive.Letter): [$($drive.Label)]"
+
+    $disk | Initialize-Disk -PartitionStyle GPT -PassThru |
+        New-Partition -DriveLetter $drive.Letter -UseMaximumSize |
+        Format-Volume -FileSystem NTFS -NewFileSystemLabel $drive.Label `
+                      -AllocationUnitSize 65536 -Confirm:$false | Out-Null
+    # 64 KiB allocation unit — recommended for SQL Server data and log files
+}
+
+# ── 3. Create SQL directory structure ─────────────────────────────────────────
+Write-Step "3/6" "Creating SQL directory structure..."
+
+$dirs = @(
+    'F:\MSSQL\DATA'               # SQL data files (.mdf, .ndf)
+    'G:\MSSQL\LOG'                # Transaction log files (.ldf)
+    'H:\MSSQL\TEMPDB'             # TempDB data + log
+    'I:\MSSQL\INDEX'              # Secondary filegroup / index files
+    'J:\MSSQL\BACKUP'             # SQL Server backups
+    'J:\MSSQL\BACKUP\MIGRATION'   # Migration staging (README Section 3.3 Phase A)
+)
+
+foreach ($dir in $dirs) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    Write-Host "  $dir"
+}
+
+# Grant SQL Server service account full control on each directory
+$sqlServiceAccount = "NT SERVICE\MSSQLSERVER"
+foreach ($dir in ($dirs | Where-Object { $_ -notlike '*MIGRATION*' })) {
+    $acl = Get-Acl $dir
+    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+        $sqlServiceAccount, "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow"
+    )
+    $acl.SetAccessRule($rule)
+    Set-Acl -Path $dir -AclObject $acl
+}
+
+# ── 4. Configure SQL Server ───────────────────────────────────────────────────
+Write-Step "4/6" "Configuring SQL Server (paths, memory, TempDB)..."
+
+# Wait for SQL Server service to be running
+$retries = 0
+do {
+    $svc = Get-Service -Name MSSQLSERVER -ErrorAction SilentlyContinue
+    if ($svc.Status -eq 'Running') { break }
+    Write-Host "  Waiting for SQL Server service ($retries)..."
+    Start-Sleep -Seconds 15
+    $retries++
+} while ($retries -lt 16)    # max 4 minutes
+
+if ($svc.Status -ne 'Running') {
+    throw "SQL Server service did not start after 4 minutes."
+}
+
+# Locate sqlcmd
+$sqlcmd = @(
+    "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\SQLCMD.EXE"
+    "C:\Program Files\Microsoft SQL Server\110\Tools\Binn\SQLCMD.EXE"
+    "sqlcmd"
+) | Where-Object { Test-Path $_ -ErrorAction SilentlyContinue } | Select-Object -First 1
+
+if (-not $sqlcmd) { $sqlcmd = "sqlcmd" }
+
+# Helper: run T-SQL via sqlcmd (Windows auth — runs as SYSTEM which has sysadmin)
+function Invoke-SQL {
+    param([string]$query, [string]$label = "")
+    if ($label) { Write-Host "  SQL: $label" }
+    & $sqlcmd -S "localhost" -E -b -Q $query
+    if ($LASTEXITCODE -ne 0) { Write-Warning "sqlcmd returned $LASTEXITCODE for: $label" }
+}
+
+# Default data, log, and backup paths for all NEW databases
+Invoke-SQL -label "Default data/log/backup paths" -query @"
+EXEC xp_instance_regwrite
+    N'HKEY_LOCAL_MACHINE',
+    N'Software\Microsoft\MSSQLServer\MSSQLServer',
+    N'DefaultData', REG_SZ, N'F:\MSSQL\DATA';
+
+EXEC xp_instance_regwrite
+    N'HKEY_LOCAL_MACHINE',
+    N'Software\Microsoft\MSSQLServer\MSSQLServer',
+    N'DefaultLog', REG_SZ, N'G:\MSSQL\LOG';
+
+EXEC xp_instance_regwrite
+    N'HKEY_LOCAL_MACHINE',
+    N'Software\Microsoft\MSSQLServer\MSSQLServer',
+    N'BackupDirectory', REG_SZ, N'J:\MSSQL\BACKUP';
+"@
+
+# Max server memory: 32 GiB VM, leave 4 GiB for OS = 28 GiB for SQL
+# Matches SQLPRD01 observed 81-94% memory utilisation
+Invoke-SQL -label "Max server memory = 28672 MB (28 GiB)" -query @"
+EXEC sp_configure 'show advanced options', 1;
+RECONFIGURE;
+EXEC sp_configure 'max server memory (MB)', 28672;
+RECONFIGURE;
+"@
+
+# Enable SQL Server to accept remote connections (usually pre-enabled on marketplace image)
+Invoke-SQL -label "Enable remote access" -query @"
+EXEC sp_configure 'remote access', 1;
+RECONFIGURE;
+"@
+
+# Move TempDB data and log files to H:\MSSQL\TEMPDB (requires SQL restart)
+Invoke-SQL -label "Relocate TempDB to H:" -query @"
+USE master;
+ALTER DATABASE tempdb
+    MODIFY FILE (NAME = N'tempdev', FILENAME = N'H:\MSSQL\TEMPDB\tempdb.mdf');
+ALTER DATABASE tempdb
+    MODIFY FILE (NAME = N'templog', FILENAME = N'H:\MSSQL\TEMPDB\templog.ldf');
+"@
+
+# Open Windows Firewall for SQL Server 1433 (in case not done by marketplace image)
+netsh advfirewall firewall add rule `
+    name="SQL Server 1433" dir=in action=allow protocol=TCP localport=1433 | Out-Null
+
+# ── 5. Restart SQL to apply TempDB path change ────────────────────────────────
+Write-Step "5/6" "Restarting SQL Server (TempDB relocation takes effect on restart)..."
+Restart-Service -Name MSSQLSERVER -Force
+Start-Sleep -Seconds 45
+
+# ── 6. Create TestDB for ANF test plan (README Section 6) ────────────────────
+Write-Step "6/6" "Creating TestDB for ANF evaluation test cases..."
+
+Invoke-SQL -label "Create TestDB (data on F:, log on G:, index filegroup on I:)" -query @"
+IF DB_ID(N'TestDB') IS NULL
+BEGIN
+    CREATE DATABASE TestDB
+    ON PRIMARY (
+        NAME = N'TestDB_data',
+        FILENAME = N'F:\MSSQL\DATA\TestDB.mdf',
+        SIZE = 512MB, MAXSIZE = UNLIMITED, FILEGROWTH = 256MB
+    ),
+    FILEGROUP [INDEXES] (
+        NAME = N'TestDB_index',
+        FILENAME = N'I:\MSSQL\INDEX\TestDB_idx.ndf',
+        SIZE = 64MB, MAXSIZE = UNLIMITED, FILEGROWTH = 64MB
+    )
+    LOG ON (
+        NAME = N'TestDB_log',
+        FILENAME = N'G:\MSSQL\LOG\TestDB_log.ldf',
+        SIZE = 128MB, MAXSIZE = UNLIMITED, FILEGROWTH = 64MB
+    );
+END
+"@
+
+# Seed workload table used by Section 6.3 T2 (DiskSpd + HammerDB simulation)
+Invoke-SQL -label "Seed WorkloadTest table (T2 perf baseline)" -query @"
+USE TestDB;
+
+IF OBJECT_ID(N'dbo.WorkloadTest', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.WorkloadTest (
+        Id          INT           IDENTITY(1,1) NOT NULL
+                        CONSTRAINT PK_WorkloadTest PRIMARY KEY CLUSTERED,
+        BatchId     UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
+        Payload     NVARCHAR(500) NOT NULL DEFAULT REPLICATE(N'X', 500),
+        CreatedAt   DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME()
+    );
+
+    -- Pre-populate 10,000 rows so queries have data to read (simulates SQLPRD01 steady state)
+    INSERT INTO dbo.WorkloadTest (Payload)
+    SELECT TOP 10000 REPLICATE(N'SEED', 125)
+    FROM sys.all_columns a CROSS JOIN sys.all_columns b;
+END
+"@
+
+# ── Verification output ───────────────────────────────────────────────────────
+Write-Host "`n════ Verification ════════════════════════════════════════════"
+
+Write-Host "`nDrive layout:"
+Get-Volume | Where-Object { $_.DriveLetter -in @('F','G','H','I','J') } |
+    Select-Object DriveLetter, FileSystemLabel,
+        @{N='AllocUnitKB'; E={ [math]::Round($_.AllocationUnitSize/1KB, 0) }},
+        @{N='SizeGB';  E={ [math]::Round($_.Size/1GB, 0) }},
+        @{N='FreeGB';  E={ [math]::Round($_.SizeRemaining/1GB, 1) }} |
+    Format-Table -AutoSize
+
+Write-Host "TempDB file locations:"
+Invoke-SQL -query "SELECT name, physical_name, size*8/1024 AS size_mb FROM sys.master_files WHERE database_id = 2;"
+
+Write-Host "SQL Server wait stats baseline (save for post-ANF comparison — README Section 3.1 Step 2):"
+Invoke-SQL -query @"
+SELECT wait_type,
+       waiting_tasks_count,
+       wait_time_ms,
+       signal_wait_time_ms
+FROM   sys.dm_os_wait_stats
+WHERE  wait_type IN (
+       'PAGEIOLATCH_SH','PAGEIOLATCH_EX','WRITELOG',
+       'IO_COMPLETION','BACKUPIO')
+ORDER BY wait_time_ms DESC;
+"@
+
+Write-Host "TestDB files:"
+Invoke-SQL -query "SELECT name, physical_name, size*8/1024 AS size_mb FROM sys.master_files WHERE DB_NAME(database_id) = 'TestDB';"
+
+Write-Host "`nConfiguration complete. VM mirrors SQLPRD01 disk layout."
+Write-Host "Ready for ANF test plan (README Section 6)."
+```
