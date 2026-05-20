@@ -1,3 +1,5 @@
 *
 !README.md
 !.gitignore
+!configure-sql-vm.ps1
+!deploy-sqlprd01-sim.ps1
