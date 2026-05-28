@@ -977,285 +977,143 @@ ANF's consistent low-latency I/O over SMB3 removes a common reason to over-provi
 
 ---
 
-## Appendix C: Test VM Provisioning Scripts
+## Appendix C: Test VM — Manual Portal Setup & Database Script
 
-These two scripts provision and configure a self-contained SQLPRD01 simulation VM in Australia East (`australiaeast`) for use in the Section 6 test plan. The VM uses the same `Standard_D8s_v3` SKU, the same five `StandardSSD_LRS` data disks, the same LUN-to-drive-letter mapping, and SQL Server 2022 Developer — but uses **32 GB disks** for each data drive instead of the production sizes, to minimise test cost. Production disk sizes are documented in Section 2.1.
-
-**Files:** `deploy-sqlprd01-sim.ps1` and `configure-sql-vm.ps1` (place both in the same folder).
-
-**To run:**
-
-```powershell
-# Minimal
-.\deploy-sqlprd01-sim.ps1
-
-# Recommended — restrict RDP to your IP
-.\deploy-sqlprd01-sim.ps1 -AllowRdpFromCIDR "203.0.113.10/32" -SubscriptionId "<your-sub-id>"
-```
-
-**After deployment (~15–20 min):**
-
-| Resource | Detail |
-|---|---|
-| VM | `SQLPRD01SIM`, `Standard_D8s_v3`, Australia East |
-| SQL Server | 2022 Developer edition (pre-installed via marketplace image) |
-| Drive layout | Same LUN order and drive letters as SQLPRD01; **test disks: 32 GB each** (production sizes: Section 2.1) |
-| ANF subnet | `10.10.2.0/28` delegated — ready for Section 3.2 ANF infrastructure setup |
-| TestDB | Pre-created with data on F:, logs on G:, index filegroup on I: — ready for T3 migration rehearsal and T5 snapshot/restore |
-
-**Drive layout (test VM — 32 GB data disks; production sizes in Section 2.1):**
-
-| Drive | Role | Size | SKU | LUN | Disk name |
-|---|---|---:|---|---:|---|
-| C: | OS | 127 GB | StandardSSD_LRS | — | SQLPRD01SIM-osdisk |
-| D: | Azure temp disk | — | Ephemeral | — | — |
-| F: | SQL Data | 32 GB | StandardSSD_LRS | 0 | SQLPRD01SIM-disk01 |
-| G: | SQL Logs | 32 GB | StandardSSD_LRS | 2 | SQLPRD01SIM-disk03 |
-| H: | SQL TempDB | 32 GB | StandardSSD_LRS | 4 | SQLPRD01SIM-disk05 |
-| I: | SQL Index | 32 GB | StandardSSD_LRS | 3 | SQLPRD01SIM-disk04 |
-| J: | SQL Backup | 32 GB | StandardSSD_LRS | 1 | SQLPRD01SIM-disk02 |
-
-**Clean up when done:**
-
-```bash
-az group delete --name SQLPRD01-SIM-RG --yes --no-wait
-```
+The test VM uses a **minimum spec** (Standard_B4ms, 1 × 32 GiB data disk) — the smallest configuration sufficient to validate ANF SMB3 connectivity, the backup/restore migration path, snapshot/restore, throughput scaling, and cross-zone replication. VM creation is done manually in Azure portal; `configure-sql-vm.ps1` is then run on the VM over RDP to initialize the disk and create the test database; `deploy-sqlprd01-sim.ps1` creates the ANF account, pool, and volumes.
 
 ---
 
-### `deploy-sqlprd01-sim.ps1`
+### Step 1 — Create the VM in Azure Portal
 
-Provisions all Azure infrastructure: resource group, VNet (with ANF-delegated subnet), NSG, public IP, NIC, SQL Server 2022 Developer VM, and all five data disks. Calls `configure-sql-vm.ps1` inside the VM via `az vm run-command`.
+Navigate to **Azure portal → Virtual machines → Create → Azure virtual machine** and use the settings below.
+
+**Basics tab:**
+
+| Setting | Value |
+|---|---|
+| **Subscription / Resource group** | Your subscription / `garyRG` |
+| **Virtual machine name** | `garySQLTEST01` |
+| **Region** | Australia East |
+| **Availability options** | No infrastructure redundancy required |
+| **Image** | **SQL Server 2022 Developer on Windows Server 2022 (Gen2)** — search "SQL Server 2022 Developer" in Marketplace |
+| **VM size** | **Standard_B4ms** (4 vCPU, 16 GiB RAM) |
+| **Authentication type** | Password |
+| **Username** | `sqladmin` |
+| **Password** | Min 12 chars, upper + lower + digit + symbol |
+| **Public inbound ports** | Allow RDP (3389) — restrict source IP in NSG after creation |
+
+**Disks tab:**
+
+| Setting | Value |
+|---|---|
+| **OS disk type** | Standard SSD (LRS), 128 GiB (default) |
+| **Data disk** | Click **Add data disk** → Name: `garySQLTEST01-disk01`, Size: **32 GiB**, Type: Standard SSD (LRS), LUN: **0** |
+
+**Networking tab:**
+
+| Setting | Value |
+|---|---|
+| **Virtual network** | `garyVNet` (same VNet that contains the ANF delegated `/28` subnet) |
+| **Subnet** | `workload-subnet` |
+| **NIC network security group** | `gary-allow-lab-nsg` |
+
+**SQL Server Settings tab:** Leave defaults — `configure-sql-vm.ps1` will reconfigure all paths and TempDB.
+
+**Review + Create:** Estimated cost ~AU$0.22/hr. Stop the VM when not actively testing.
+
+---
+
+### VM Spec Summary
+
+| Component | Spec |
+|---|---|
+| **VM size** | Standard_B4ms (4 vCPU, 16 GiB RAM) |
+| **Image** | SQL Server 2022 Developer on Windows Server 2022 (Gen2) |
+| **OS disk** | 128 GiB, Standard SSD (LRS) |
+| **Data disk** | 1 × 32 GiB, Standard SSD (LRS), LUN 0 → F: (all SQL directories) |
+| **Region** | Australia East |
+| **ANF subnet** | `/28` delegated subnet (`anf-subnet`) in `garyVNet` — required before running `deploy-sqlprd01-sim.ps1` |
+
+**Drive layout (single data disk — all SQL directories on F:):**
+
+| Drive | Role | Size | SKU | LUN |
+|---|---|---:|---|---:|
+| C: | OS | 128 GiB | Standard SSD | — |
+| D: | Azure temp disk | — | Ephemeral | — |
+| F: | SQL data, logs, TempDB, backups | 32 GiB | Standard SSD | 0 |
+
+---
+
+### Step 2 — Run `configure-sql-vm.ps1` on the VM (over RDP)
+
+RDP into `garySQLTEST01`, open **PowerShell as Administrator**, copy `configure-sql-vm.ps1` to the VM (or download from the repo), then run:
 
 ```powershell
-<#
-.SYNOPSIS
-  Deploy a SQLPRD01 simulation VM in Australia East for ANF test plan (README Section 6).
-  Matches: Standard_D8s_v3, 5x StandardSSD_LRS disks, SQL Server 2022 Developer.
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\configure-sql-vm.ps1
+```
 
-.REQUIREMENTS
-  - Azure CLI (az) logged in: az login
-  - Contributor access on target subscription
-  - configure-sql-vm.ps1 in the same directory as this script
-#>
+This script (~5 min) will:
+- Initialize the 32 GiB data disk as **F:** with 64 KiB NTFS allocation unit
+- Create `F:\MSSQL\{DATA,LOG,TEMPDB,BACKUP,BACKUP\MIGRATION}`
+- Configure SQL Server default paths, set max server memory to **12 GiB** (Standard_B4ms)
+- Relocate TempDB to `F:\MSSQL\TEMPDB`
+- Create **TestDB** with a pre-seeded `WorkloadTest` table (10,000 rows) ready for migration rehearsal
 
-param(
-    [string]$SubscriptionId = "",           # leave blank to use current subscription
-    [string]$AllowRdpFromCIDR = "*"         # SECURITY: restrict to your IP, e.g. "203.0.113.10/32"
-)
+---
 
-Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+### Step 3 — Run `deploy-sqlprd01-sim.ps1` from your workstation (Azure CLI)
 
-# ── Configuration ─────────────────────────────────────────────────────────────
-$location    = "australiaeast"
-$rg          = "SQLPRD01-SIM-RG"
-$vmName      = "SQLPRD01SIM"
-$vmSize      = "Standard_D8s_v3"
-$adminUser   = "sqladmin"
-$sqlImage    = "MicrosoftSQLServer:sql2022-ws2022:sqldev-gen2:latest"
-$diskSku     = "StandardSSD_LRS"
-$osDiskSku   = "StandardSSD_LRS"
-$vnetName    = "sqlsim-vnet"
-$vmSubnet    = "vm-subnet"
-$anfSubnet   = "anf-delegated"    # /28 delegated — ready for Section 3.2 ANF setup
-$nsgName     = "sqlsim-nsg"
-$pipName     = "$vmName-pip"
-$nicName     = "$vmName-nic"
+With Azure CLI logged in (`az login`), supply the full ANF delegated subnet resource ID:
 
-# ── Validate configure script exists ──────────────────────────────────────────
-$configScript = Join-Path $PSScriptRoot "configure-sql-vm.ps1"
-if (-not (Test-Path $configScript)) {
-    throw "configure-sql-vm.ps1 not found alongside this script. Cannot proceed."
-}
+```powershell
+.\deploy-sqlprd01-sim.ps1 `
+    -ANFSubnetId "/subscriptions/<sub-id>/resourceGroups/garyRG/providers/Microsoft.Network/virtualNetworks/garyVNet/subnets/anf-subnet"
+```
 
-# ── Password prompt ────────────────────────────────────────────────────────────
-$secPass = Read-Host "Enter VM admin password (min 12 chars, upper+lower+digit+symbol)" -AsSecureString
-$adminPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-    [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secPass)
-)
+This creates the ANF account (`anfacct-gary-test`), a 4 TiB Flexible Manual QoS capacity pool (`sql-pool-test`), and three SMB volumes for the test:
 
-# Validate password complexity (Azure requirement)
-if ($adminPassword.Length -lt 12) { throw "Password must be at least 12 characters." }
+| ANF Volume | Quota | Throughput | Role |
+|---|---:|---:|---|
+| sql-data | 100 GiB | 16 MiB/s | SQL data files (.mdf) — T1, T3 |
+| sql-logs | 100 GiB | 8 MiB/s | Transaction logs (.ldf) — T1, T2 |
+| sql-backup | 256 GiB | 8 MiB/s | Backups + migration staging — T5 boost to 128 MiB/s |
 
-# ── Subscription ───────────────────────────────────────────────────────────────
-if ($SubscriptionId) {
-    az account set --subscription $SubscriptionId
-}
-Write-Host "Using subscription: $(az account show --query name -o tsv)"
+All volumes are **thin-provisioned** — billing based on consumed GiB only.
 
-# ── 1. Resource Group ──────────────────────────────────────────────────────────
-Write-Host "`n[1/8] Creating resource group $rg in $location..."
-az group create --name $rg --location $location --tags "Purpose=SQLPRD01-Simulation" "Project=ANF-Evaluation" | Out-Null
+**Before running**: Set `$adDomain`, `$adDNS`, and `$adUser` at the top of the script to register the AD connector (required for SMB volume creation and mounting).
 
-# ── 2. VNet + Subnets ─────────────────────────────────────────────────────────
-Write-Host "[2/8] Creating VNet and subnets..."
-az network vnet create `
-    --resource-group $rg `
-    --name $vnetName `
-    --location $location `
-    --address-prefix "10.10.0.0/16" | Out-Null
+---
 
-# VM subnet
-az network vnet subnet create `
-    --resource-group $rg `
-    --vnet-name $vnetName `
-    --name $vmSubnet `
-    --address-prefix "10.10.1.0/24" | Out-Null
+### Clean Up
 
-# ANF delegated subnet (/28 minimum — required for ANF volumes in Section 3.2)
-az network vnet subnet create `
-    --resource-group $rg `
-    --vnet-name $vnetName `
-    --name $anfSubnet `
-    --address-prefix "10.10.2.0/28" `
-    --delegations "Microsoft.NetApp/volumes" | Out-Null
+```bash
+# Delete ANF resources (volumes, pool, account)
+az netappfiles account delete --resource-group garyRG --name anfacct-gary-test --yes
 
-Write-Host "  VM subnet:  10.10.1.0/24"
-Write-Host "  ANF subnet: 10.10.2.0/28 (delegated — ready for Section 3.2)"
-
-# ── 3. NSG ────────────────────────────────────────────────────────────────────
-Write-Host "[3/8] Creating NSG..."
-az network nsg create --resource-group $rg --name $nsgName --location $location | Out-Null
-
-# RDP — restricted to $AllowRdpFromCIDR (default * — tighten for production)
-az network nsg rule create `
-    --resource-group $rg --nsg-name $nsgName `
-    --name "AllowRDP" --priority 1000 --protocol Tcp --direction Inbound `
-    --source-address-prefix $AllowRdpFromCIDR --source-port-range "*" `
-    --destination-address-prefix "*" --destination-port-range 3389 `
-    --access Allow | Out-Null
-
-# SQL 1433 — VNet-scoped only
-az network nsg rule create `
-    --resource-group $rg --nsg-name $nsgName `
-    --name "AllowSQL-VNet" --priority 1010 --protocol Tcp --direction Inbound `
-    --source-address-prefix "VirtualNetwork" --source-port-range "*" `
-    --destination-address-prefix "*" --destination-port-range 1433 `
-    --access Allow | Out-Null
-
-if ($AllowRdpFromCIDR -eq "*") {
-    Write-Warning "RDP is open to the internet. Pass -AllowRdpFromCIDR <your-IP/32> to restrict."
-}
-
-# ── 4. Public IP + NIC ────────────────────────────────────────────────────────
-Write-Host "[4/8] Creating public IP and NIC..."
-az network public-ip create `
-    --resource-group $rg --name $pipName --location $location `
-    --sku Standard --allocation-method Static --zone 1 | Out-Null
-
-az network nic create `
-    --resource-group $rg --name $nicName --location $location `
-    --vnet-name $vnetName --subnet $vmSubnet `
-    --network-security-group $nsgName `
-    --public-ip-address $pipName | Out-Null
-
-# ── 5. VM Creation ────────────────────────────────────────────────────────────
-Write-Host "[5/8] Creating VM with SQL Server 2022 Developer image (10-15 min)..."
-az vm create `
-    --resource-group $rg `
-    --name $vmName `
-    --location $location `
-    --size $vmSize `
-    --image $sqlImage `
-    --os-disk-name "$vmName-osdisk" `
-    --os-disk-size-gb 127 `
-    --storage-sku "$osDiskSku" `
-    --nics $nicName `
-    --admin-username $adminUser `
-    --admin-password $adminPassword `
-    --enable-agent true `
-    --tags "Role=SQLPRD01-Simulation" | Out-Null
-
-Write-Host "  VM created. Waiting for agent to become ready..."
-Start-Sleep -Seconds 60
-
-# ── 6. Attach 5 Data Disks (matching SQLPRD01 spec exactly) ──────────────────
-Write-Host "[6/8] Attaching data disks..."
-#  LUN  Size    Drive  Role
-#   0   128 GB   F:    SQL Data   (SQLPRD01-disk01)
-#   1   256 GB   J:    SQL Backup (SQLPRD01-disk02)
-#   2   128 GB   G:    SQL Logs   (SQLPRD01-disk03)
-#   3    60 GB   I:    SQL Index  (SQLPRD01-disk04)
-#   4   128 GB   H:    SQL Misc/TempDB (SQLPRD01-disk05)
-
-$disks = @(
-    @{ Lun = 0; Name = "$vmName-disk01"; SizeGB = 32 }
-    @{ Lun = 1; Name = "$vmName-disk02"; SizeGB = 32 }
-    @{ Lun = 2; Name = "$vmName-disk03"; SizeGB = 32 }
-    @{ Lun = 3; Name = "$vmName-disk04"; SizeGB = 32 }
-    @{ Lun = 4; Name = "$vmName-disk05"; SizeGB = 32 }
-)
-
-foreach ($disk in $disks) {
-    Write-Host "  LUN $($disk.Lun): $($disk.Name) ($($disk.SizeGB) GB $diskSku)"
-    az vm disk attach `
-        --resource-group $rg `
-        --vm-name $vmName `
-        --name $disk.Name `
-        --new `
-        --size-gb $disk.SizeGB `
-        --sku $diskSku `
-        --lun $disk.Lun | Out-Null
-}
-
-# ── 7. In-VM Configuration via Run Command ────────────────────────────────────
-Write-Host "[7/8] Running in-VM configuration (disk init + SQL paths)..."
-Write-Host "  Reading configure-sql-vm.ps1..."
-
-$scriptContent = Get-Content $configScript -Raw -Encoding UTF8
-
-# az vm run-command invoke accepts inline script content via --scripts
-# Use --command-id RunPowerShellScript
-az vm run-command invoke `
-    --resource-group $rg `
-    --name $vmName `
-    --command-id RunPowerShellScript `
-    --scripts $scriptContent
-
-# ── 8. Output Connection Info ─────────────────────────────────────────────────
-Write-Host "[8/8] Retrieving connection details..."
-$pip = az network public-ip show --resource-group $rg --name $pipName --query "ipAddress" -o tsv
-
-Write-Host "`n╔══════════════════════════════════════════════════════════╗"
-Write-Host "  SQLPRD01 Simulation VM — Ready"
-Write-Host "╚══════════════════════════════════════════════════════════╝"
-Write-Host "  VM Name       : $vmName"
-Write-Host "  Region        : $location (Australia East)"
-Write-Host "  Size          : $vmSize (8 vCPU, 32 GiB — matches SQLPRD01)"
-Write-Host "  Public IP     : $pip"
-Write-Host "  RDP           : mstsc /v:$pip"
-Write-Host "  Admin user    : $adminUser"
-Write-Host "  SQL Instance  : $vmName (default instance, Windows auth)"
-Write-Host "  SQL TCP port  : 1433 (VNet-scoped; RDP in for management)"
-Write-Host ""
-Write-Host "  Drive layout (test VM — 32 GB data disks; production sizes in Section 2.1):"
-Write-Host "    C: — OS (127 GB StandardSSD)"
-Write-Host "    D: — Temp disk (Azure ephemeral)"
-Write-Host "    F: — SQL Data     32 GB StandardSSD  LUN 0  ($vmName-disk01)"
-Write-Host "    G: — SQL Logs     32 GB StandardSSD  LUN 2  ($vmName-disk03)"
-Write-Host "    H: — SQL TempDB   32 GB StandardSSD  LUN 4  ($vmName-disk05)"
-Write-Host "    I: — SQL Index    32 GB StandardSSD  LUN 3  ($vmName-disk04)"
-Write-Host "    J: — SQL Backup   32 GB StandardSSD  LUN 1  ($vmName-disk02)"
-Write-Host ""
-Write-Host "  ANF subnet ready: 10.10.2.0/28 (delegated) — use for Section 3.2"
-Write-Host ""
-Write-Host "  To clean up: az group delete --name $rg --yes --no-wait"
+# Delete test VM and disk (from portal or CLI)
+az vm delete --resource-group garyRG --name garySQLTEST01 --yes
+az disk delete --resource-group garyRG --name garySQLTEST01-disk01 --yes
 ```
 
 ---
 
 ### `configure-sql-vm.ps1`
 
-Runs inside the VM (called automatically by `deploy-sqlprd01-sim.ps1`, or re-run manually over RDP). Initializes all five disks with correct GPT partitions and 64 KiB NTFS allocation units, assigns drive letters in SQLPRD01 order, grants `NT SERVICE\MSSQLSERVER` access to each directory, configures SQL Server default paths, moves TempDB to H:, sets max server memory to 28 GiB, and creates `TestDB` with the data/log/index file layout ready for T3 migration rehearsal and T5 snapshot/restore validation.
+Runs **on the VM over RDP** (Step 2 above). Initializes the single data disk, creates all SQL directories on F:, configures SQL Server, and creates `TestDB`.
 
 ```powershell
 <#
 .SYNOPSIS
-  Configure SQLPRD01SIM — disk layout, SQL Server paths, TempDB, test database.
-  Runs inside the VM via az vm run-command (called by deploy-sqlprd01-sim.ps1)
-  or manually over RDP.
-  Matches SQLPRD01 production disk layout exactly.
+  Configure test SQL VM for ANF migration and technology feasibility testing.
+  Minimum setup: 1 data disk (F:), all SQL directories on F:.
+  Run this script manually on the VM over RDP after creating the VM in Azure portal.
+  Tested with: Standard_B4ms, 1x 32 GB StandardSSD data disk, SQL Server 2022 Developer.
+
+.REQUIREMENTS
+  - VM created in Azure portal (see README Appendix C for manual steps and spec)
+  - 1 data disk (32 GB, Standard SSD, LUN 0) attached to the VM
+  - Run as Administrator in PowerShell on the VM
 #>
 
 Set-StrictMode -Version Latest
@@ -1263,70 +1121,46 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step { param($n, $msg) Write-Host "`n[$n] $msg" -ForegroundColor Cyan }
 
-# ── 1. Wait for all 5 data disks to appear ────────────────────────────────────
-Write-Step "1/6" "Waiting for 5 RAW data disks..."
+# ── 1. Wait for the single data disk to appear ────────────────────────────────
+Write-Step "1/5" "Waiting for 1 RAW data disk (LUN 0, 32 GB)..."
 
 $maxWait = 120
 $elapsed = 0
 do {
     $rawDisks = Get-Disk | Where-Object { $_.PartitionStyle -eq 'RAW' } | Sort-Object Number
-    if ($rawDisks.Count -eq 5) { break }
+    if ($rawDisks.Count -ge 1) { break }
     Start-Sleep -Seconds 10
     $elapsed += 10
-    Write-Host "  Found $($rawDisks.Count)/5 RAW disks — waiting ($elapsed s)..."
+    Write-Host "  Found $($rawDisks.Count)/1 RAW disks — waiting ($elapsed s)..."
 } while ($elapsed -lt $maxWait)
 
-if ($rawDisks.Count -ne 5) {
-    throw "Expected 5 RAW disks but found $($rawDisks.Count) after ${maxWait}s. Check disk attachment."
+if ($rawDisks.Count -lt 1) {
+    throw "Expected at least 1 RAW data disk but found none after ${maxWait}s. Attach a 32 GB data disk in Azure portal and retry."
 }
 
-# ── 2. Initialize disks and assign drive letters ───────────────────────────────
-Write-Step "2/6" "Initializing disks and assigning drive letters..."
-#
-# Azure presents data disks sorted by LUN in disk-number order (after OS=0 and Temp=1).
-# Sorted RAW disks map to LUNs 0-4 in order:
-#   Index 0  →  LUN 0, 32 GB  →  F: SQLData
-#   Index 1  →  LUN 1, 32 GB  →  J: SQLBackup
-#   Index 2  →  LUN 2, 32 GB  →  G: SQLLogs
-#   Index 3  →  LUN 3, 32 GB  →  I: SQLIndex
-#   Index 4  →  LUN 4, 32 GB  →  H: SQLTempDB
+$disk   = $rawDisks[0]
+$diskGB = [math]::Round($disk.Size / 1GB, 0)
+Write-Host "  Found disk $($disk.Number) ($diskGB GB) — will format as F: [SQLData]"
 
-$driveMap = @(
-    [PSCustomObject]@{ Letter = 'F'; Label = 'SQLData';   ExpectedGB = 32 }   # LUN 0
-    [PSCustomObject]@{ Letter = 'J'; Label = 'SQLBackup'; ExpectedGB = 32 }   # LUN 1
-    [PSCustomObject]@{ Letter = 'G'; Label = 'SQLLogs';   ExpectedGB = 32 }   # LUN 2
-    [PSCustomObject]@{ Letter = 'I'; Label = 'SQLIndex';  ExpectedGB = 32 }   # LUN 3
-    [PSCustomObject]@{ Letter = 'H'; Label = 'SQLTempDB'; ExpectedGB = 32 }   # LUN 4
-)
+# ── 2. Initialize disk and assign drive letter F: ─────────────────────────────
+Write-Step "2/5" "Initializing disk and assigning drive letter F:..."
 
-for ($i = 0; $i -lt $rawDisks.Count; $i++) {
-    $disk  = $rawDisks[$i]
-    $drive = $driveMap[$i]
-    $diskGB = [math]::Round($disk.Size / 1GB, 0)
+$disk | Initialize-Disk -PartitionStyle GPT -PassThru |
+    New-Partition -DriveLetter 'F' -UseMaximumSize |
+    Format-Volume -FileSystem NTFS -NewFileSystemLabel 'SQLData' `
+                  -AllocationUnitSize 65536 -Confirm:$false | Out-Null
 
-    if ($diskGB -ne $drive.ExpectedGB) {
-        Write-Warning "Disk $($disk.Number): expected $($drive.ExpectedGB) GB, got $diskGB GB. Check LUN order."
-    }
+Write-Host "  Disk $($disk.Number) ($diskGB GB) → F: [SQLData] — 64 KiB allocation unit"
 
-    Write-Host "  Disk $($disk.Number) ($diskGB GB) → $($drive.Letter): [$($drive.Label)]"
-
-    $disk | Initialize-Disk -PartitionStyle GPT -PassThru |
-        New-Partition -DriveLetter $drive.Letter -UseMaximumSize |
-        Format-Volume -FileSystem NTFS -NewFileSystemLabel $drive.Label `
-                      -AllocationUnitSize 65536 -Confirm:$false | Out-Null
-    # 64 KiB allocation unit — recommended for SQL Server data and log files
-}
-
-# ── 3. Create SQL directory structure ─────────────────────────────────────────
-Write-Step "3/6" "Creating SQL directory structure..."
+# ── 3. Create SQL directory structure on F: ───────────────────────────────────
+Write-Step "3/5" "Creating SQL directory structure on F:..."
 
 $dirs = @(
     'F:\MSSQL\DATA'               # SQL data files (.mdf, .ndf)
-    'G:\MSSQL\LOG'                # Transaction log files (.ldf)
-    'H:\MSSQL\TEMPDB'             # TempDB data + log
-    'I:\MSSQL\INDEX'              # Secondary filegroup / index files
-    'J:\MSSQL\BACKUP'             # SQL Server backups
-    'J:\MSSQL\BACKUP\MIGRATION'   # Migration staging (README Section 3.3 Phase A)
+    'F:\MSSQL\LOG'                # Transaction log files (.ldf)
+    'F:\MSSQL\TEMPDB'             # TempDB data + log
+    'F:\MSSQL\BACKUP'             # SQL Server backups
+    'F:\MSSQL\BACKUP\MIGRATION'   # Migration staging (README Section 3.3 Phase A)
 )
 
 foreach ($dir in $dirs) {
@@ -1334,7 +1168,6 @@ foreach ($dir in $dirs) {
     Write-Host "  $dir"
 }
 
-# Grant SQL Server service account full control on each directory
 $sqlServiceAccount = "NT SERVICE\MSSQLSERVER"
 foreach ($dir in ($dirs | Where-Object { $_ -notlike '*MIGRATION*' })) {
     $acl = Get-Acl $dir
@@ -1346,9 +1179,8 @@ foreach ($dir in ($dirs | Where-Object { $_ -notlike '*MIGRATION*' })) {
 }
 
 # ── 4. Configure SQL Server ───────────────────────────────────────────────────
-Write-Step "4/6" "Configuring SQL Server (paths, memory, TempDB)..."
+Write-Step "4/5" "Configuring SQL Server (paths, memory, TempDB)..."
 
-# Wait for SQL Server service to be running
 $retries = 0
 do {
     $svc = Get-Service -Name MSSQLSERVER -ErrorAction SilentlyContinue
@@ -1356,22 +1188,17 @@ do {
     Write-Host "  Waiting for SQL Server service ($retries)..."
     Start-Sleep -Seconds 15
     $retries++
-} while ($retries -lt 16)    # max 4 minutes
+} while ($retries -lt 16)
 
-if ($svc.Status -ne 'Running') {
-    throw "SQL Server service did not start after 4 minutes."
-}
+if ($svc.Status -ne 'Running') { throw "SQL Server service did not start after 4 minutes." }
 
-# Locate sqlcmd
 $sqlcmd = @(
     "C:\Program Files\Microsoft SQL Server\Client SDK\ODBC\170\Tools\Binn\SQLCMD.EXE"
     "C:\Program Files\Microsoft SQL Server\110\Tools\Binn\SQLCMD.EXE"
     "sqlcmd"
 ) | Where-Object { Test-Path $_ -ErrorAction SilentlyContinue } | Select-Object -First 1
-
 if (-not $sqlcmd) { $sqlcmd = "sqlcmd" }
 
-# Helper: run T-SQL via sqlcmd (Windows auth — runs as SYSTEM which has sysadmin)
 function Invoke-SQL {
     param([string]$query, [string]$label = "")
     if ($label) { Write-Host "  SQL: $label" }
@@ -1379,133 +1206,215 @@ function Invoke-SQL {
     if ($LASTEXITCODE -ne 0) { Write-Warning "sqlcmd returned $LASTEXITCODE for: $label" }
 }
 
-# Default data, log, and backup paths for all NEW databases
-Invoke-SQL -label "Default data/log/backup paths" -query @"
-EXEC xp_instance_regwrite
-    N'HKEY_LOCAL_MACHINE',
-    N'Software\Microsoft\MSSQLServer\MSSQLServer',
-    N'DefaultData', REG_SZ, N'F:\MSSQL\DATA';
-
-EXEC xp_instance_regwrite
-    N'HKEY_LOCAL_MACHINE',
-    N'Software\Microsoft\MSSQLServer\MSSQLServer',
-    N'DefaultLog', REG_SZ, N'G:\MSSQL\LOG';
-
-EXEC xp_instance_regwrite
-    N'HKEY_LOCAL_MACHINE',
-    N'Software\Microsoft\MSSQLServer\MSSQLServer',
-    N'BackupDirectory', REG_SZ, N'J:\MSSQL\BACKUP';
+Invoke-SQL -label "Default data/log/backup paths (all on F:)" -query @"
+EXEC xp_instance_regwrite N'HKEY_LOCAL_MACHINE',
+    N'Software\Microsoft\MSSQLServer\MSSQLServer', N'DefaultData', REG_SZ, N'F:\MSSQL\DATA';
+EXEC xp_instance_regwrite N'HKEY_LOCAL_MACHINE',
+    N'Software\Microsoft\MSSQLServer\MSSQLServer', N'DefaultLog',  REG_SZ, N'F:\MSSQL\LOG';
+EXEC xp_instance_regwrite N'HKEY_LOCAL_MACHINE',
+    N'Software\Microsoft\MSSQLServer\MSSQLServer', N'BackupDirectory', REG_SZ, N'F:\MSSQL\BACKUP';
 "@
 
-# Max server memory: 32 GiB VM, leave 4 GiB for OS = 28 GiB for SQL
-# Matches SQLPRD01 observed 81-94% memory utilisation
-Invoke-SQL -label "Max server memory = 28672 MB (28 GiB)" -query @"
-EXEC sp_configure 'show advanced options', 1;
-RECONFIGURE;
-EXEC sp_configure 'max server memory (MB)', 28672;
-RECONFIGURE;
+# Standard_B4ms: 16 GiB total — leave 4 GiB for OS = 12 GiB for SQL
+Invoke-SQL -label "Max server memory = 12288 MB (12 GiB for Standard_B4ms)" -query @"
+EXEC sp_configure 'show advanced options', 1; RECONFIGURE;
+EXEC sp_configure 'max server memory (MB)', 12288; RECONFIGURE;
 "@
 
-# Enable SQL Server to accept remote connections (usually pre-enabled on marketplace image)
 Invoke-SQL -label "Enable remote access" -query @"
-EXEC sp_configure 'remote access', 1;
-RECONFIGURE;
+EXEC sp_configure 'remote access', 1; RECONFIGURE;
 "@
 
-# Move TempDB data and log files to H:\MSSQL\TEMPDB (requires SQL restart)
-Invoke-SQL -label "Relocate TempDB to H:" -query @"
+Invoke-SQL -label "Relocate TempDB to F:\MSSQL\TEMPDB" -query @"
 USE master;
-ALTER DATABASE tempdb
-    MODIFY FILE (NAME = N'tempdev', FILENAME = N'H:\MSSQL\TEMPDB\tempdb.mdf');
-ALTER DATABASE tempdb
-    MODIFY FILE (NAME = N'templog', FILENAME = N'H:\MSSQL\TEMPDB\templog.ldf');
+ALTER DATABASE tempdb MODIFY FILE (NAME = N'tempdev', FILENAME = N'F:\MSSQL\TEMPDB\tempdb.mdf');
+ALTER DATABASE tempdb MODIFY FILE (NAME = N'templog', FILENAME = N'F:\MSSQL\TEMPDB\templog.ldf');
 "@
 
-# Open Windows Firewall for SQL Server 1433 (in case not done by marketplace image)
 netsh advfirewall firewall add rule `
     name="SQL Server 1433" dir=in action=allow protocol=TCP localport=1433 | Out-Null
 
-# ── 5. Restart SQL to apply TempDB path change ────────────────────────────────
-Write-Step "5/6" "Restarting SQL Server (TempDB relocation takes effect on restart)..."
+# ── 5. Restart SQL and create TestDB ─────────────────────────────────────────
+Write-Step "5/5" "Restarting SQL Server and creating TestDB..."
 Restart-Service -Name MSSQLSERVER -Force
 Start-Sleep -Seconds 45
 
-# ── 6. Create TestDB for ANF test plan (README Section 6) ────────────────────
-Write-Step "6/6" "Creating TestDB for ANF evaluation test cases..."
-
-Invoke-SQL -label "Create TestDB (data on F:, log on G:, index filegroup on I:)" -query @"
+Invoke-SQL -label "Create TestDB (data and log on F:)" -query @"
 IF DB_ID(N'TestDB') IS NULL
 BEGIN
     CREATE DATABASE TestDB
     ON PRIMARY (
         NAME = N'TestDB_data',
         FILENAME = N'F:\MSSQL\DATA\TestDB.mdf',
-        SIZE = 512MB, MAXSIZE = UNLIMITED, FILEGROWTH = 256MB
-    ),
-    FILEGROUP [INDEXES] (
-        NAME = N'TestDB_index',
-        FILENAME = N'I:\MSSQL\INDEX\TestDB_idx.ndf',
-        SIZE = 64MB, MAXSIZE = UNLIMITED, FILEGROWTH = 64MB
+        SIZE = 256MB, MAXSIZE = UNLIMITED, FILEGROWTH = 128MB
     )
     LOG ON (
         NAME = N'TestDB_log',
-        FILENAME = N'G:\MSSQL\LOG\TestDB_log.ldf',
-        SIZE = 128MB, MAXSIZE = UNLIMITED, FILEGROWTH = 64MB
+        FILENAME = N'F:\MSSQL\LOG\TestDB_log.ldf',
+        SIZE = 64MB, MAXSIZE = UNLIMITED, FILEGROWTH = 32MB
     );
 END
 "@
 
-# Seed workload table used by Section 6.3 T2 (DiskSpd + HammerDB simulation)
-Invoke-SQL -label "Seed WorkloadTest table (T2 perf baseline)" -query @"
+Invoke-SQL -label "Seed WorkloadTest table (10,000 rows for T1/T2 testing)" -query @"
 USE TestDB;
-
 IF OBJECT_ID(N'dbo.WorkloadTest', N'U') IS NULL
 BEGIN
     CREATE TABLE dbo.WorkloadTest (
-        Id          INT           IDENTITY(1,1) NOT NULL
-                        CONSTRAINT PK_WorkloadTest PRIMARY KEY CLUSTERED,
-        BatchId     UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
-        Payload     NVARCHAR(500) NOT NULL DEFAULT REPLICATE(N'X', 500),
-        CreatedAt   DATETIME2(3)  NOT NULL DEFAULT SYSUTCDATETIME()
+        Id       INT              IDENTITY(1,1) NOT NULL CONSTRAINT PK_WorkloadTest PRIMARY KEY CLUSTERED,
+        BatchId  UNIQUEIDENTIFIER NOT NULL DEFAULT NEWSEQUENTIALID(),
+        Payload  NVARCHAR(500)    NOT NULL DEFAULT REPLICATE(N'X', 500),
+        CreatedAt DATETIME2(3)   NOT NULL DEFAULT SYSUTCDATETIME()
     );
-
-    -- Pre-populate 10,000 rows so queries have data to read (simulates SQLPRD01 steady state)
     INSERT INTO dbo.WorkloadTest (Payload)
     SELECT TOP 10000 REPLICATE(N'SEED', 125)
     FROM sys.all_columns a CROSS JOIN sys.all_columns b;
 END
 "@
 
-# ── Verification output ───────────────────────────────────────────────────────
 Write-Host "`n════ Verification ════════════════════════════════════════════"
-
-Write-Host "`nDrive layout:"
-Get-Volume | Where-Object { $_.DriveLetter -in @('F','G','H','I','J') } |
+Get-Volume | Where-Object { $_.DriveLetter -eq 'F' } |
     Select-Object DriveLetter, FileSystemLabel,
         @{N='AllocUnitKB'; E={ [math]::Round($_.AllocationUnitSize/1KB, 0) }},
-        @{N='SizeGB';  E={ [math]::Round($_.Size/1GB, 0) }},
-        @{N='FreeGB';  E={ [math]::Round($_.SizeRemaining/1GB, 1) }} |
+        @{N='SizeGB'; E={ [math]::Round($_.Size/1GB, 0) }},
+        @{N='FreeGB'; E={ [math]::Round($_.SizeRemaining/1GB, 1) }} |
     Format-Table -AutoSize
 
-Write-Host "TempDB file locations:"
+Write-Host "TempDB locations:"
 Invoke-SQL -query "SELECT name, physical_name, size*8/1024 AS size_mb FROM sys.master_files WHERE database_id = 2;"
-
-Write-Host "SQL Server wait stats baseline (save for post-ANF comparison — README Section 3.1 Step 2):"
-Invoke-SQL -query @"
-SELECT wait_type,
-       waiting_tasks_count,
-       wait_time_ms,
-       signal_wait_time_ms
-FROM   sys.dm_os_wait_stats
-WHERE  wait_type IN (
-       'PAGEIOLATCH_SH','PAGEIOLATCH_EX','WRITELOG',
-       'IO_COMPLETION','BACKUPIO')
-ORDER BY wait_time_ms DESC;
-"@
-
 Write-Host "TestDB files:"
 Invoke-SQL -query "SELECT name, physical_name, size*8/1024 AS size_mb FROM sys.master_files WHERE DB_NAME(database_id) = 'TestDB';"
+Write-Host "`nWait stats baseline (save for post-ANF comparison — README Section 3.1 Step 2):"
+Invoke-SQL -query @"
+SELECT wait_type, waiting_tasks_count, wait_time_ms, signal_wait_time_ms
+FROM sys.dm_os_wait_stats
+WHERE wait_type IN ('PAGEIOLATCH_SH','PAGEIOLATCH_EX','WRITELOG','IO_COMPLETION','BACKUPIO')
+ORDER BY wait_time_ms DESC;
+"@
+Write-Host "`nConfiguration complete. TestDB ready for ANF migration feasibility test (README Section 6)."
+```
 
-Write-Host "`nConfiguration complete. VM mirrors SQLPRD01 disk layout."
-Write-Host "Ready for ANF test plan (README Section 6)."
+---
+
+### `deploy-sqlprd01-sim.ps1`
+
+Creates the ANF account, Flexible capacity pool (Manual QoS), and three SMB volumes. Run from a workstation with Azure CLI — no VM creation. **Requires the VM and `configure-sql-vm.ps1` to be complete first.**
+
+```powershell
+<#
+.SYNOPSIS
+  Set up ANF test infrastructure for SQL Server migration feasibility testing.
+  Creates: ANF account, Flexible capacity pool (Manual QoS), and 3 SMB volumes
+  (sql-data, sql-logs, sql-backup) sized for a single Standard_B4ms test VM.
+
+.REQUIREMENTS
+  - VM already created in Azure portal (see README Appendix C for manual steps and spec)
+  - configure-sql-vm.ps1 already run on the VM over RDP
+  - ANF delegated subnet (/28) exists in garyVNet — set $ANFSubnetId below
+  - Azure CLI logged in: az login
+  - Contributor access on garyRG
+
+.NOTES
+  VM creation is intentionally manual — see README Appendix C for portal steps.
+  This script handles only the ANF side of the test environment.
+#>
+
+param(
+    [string]$SubscriptionId = "",
+    [string]$ANFSubnetId    = ""   # /subscriptions/<sub>/resourceGroups/garyRG/providers/
+                                   # Microsoft.Network/virtualNetworks/garyVNet/subnets/anf-subnet
+)
+
+Set-StrictMode -Version Latest
+$ErrorActionPreference = "Stop"
+
+if (-not $ANFSubnetId) {
+    throw "ANFSubnetId is required. Pass it: -ANFSubnetId '/subscriptions/<sub>/resourceGroups/garyRG/providers/Microsoft.Network/virtualNetworks/garyVNet/subnets/anf-subnet'"
+}
+
+$location    = "australiaeast"
+$rg          = "garyRG"
+$anfAccount  = "anfacct-gary-test"
+$anfPool     = "sql-pool-test"
+$poolSizeTiB = 4
+$adDomain    = ""   # Required for SMB — e.g. "corp.contoso.com"
+$adDNS       = ""   # AD DNS server IP
+$adUser      = ""   # AD join account username (no domain prefix)
+$adOU        = ""   # OU path for ANF computer object (optional)
+
+if ($SubscriptionId) { az account set --subscription $SubscriptionId }
+Write-Host "Using subscription: $(az account show --query name -o tsv)"
+
+# ── 1. ANF Account ─────────────────────────────────────────────────────────────
+Write-Host "`n[1/4] Creating ANF account $anfAccount..."
+az netappfiles account create --resource-group $rg --location $location --name $anfAccount | Out-Null
+
+# ── 2. AD Connector (required for SMB volumes) ────────────────────────────────
+if ($adDomain -and $adDNS -and $adUser) {
+    Write-Host "[2/4] Registering AD connector for $adDomain..."
+    $adPass = Read-Host "AD join password for $adUser" -AsSecureString
+    $adPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($adPass)
+    )
+    $ouArgs = if ($adOU) { @("--organizational-unit", $adOU) } else { @() }
+    az netappfiles account ad add `
+        --resource-group $rg --name $anfAccount `
+        --username $adUser --password $adPlain `
+        --domain $adDomain --dns $adDNS `
+        --smb-server-name ANFTEST01 @ouArgs | Out-Null
+    Write-Host "  AD connector registered — SMB server: ANFTEST01"
+} else {
+    Write-Host "[2/4] Skipping AD connector — set `$adDomain/`$adDNS/`$adUser at top of script to enable SMB."
+    Write-Warning "SMB volume creation will fail without an AD connector."
+}
+
+# ── 3. Flexible Capacity Pool (Manual QoS) ────────────────────────────────────
+Write-Host "[3/4] Creating $poolSizeTiB TiB Flexible pool $anfPool (Manual QoS)..."
+az netappfiles pool create `
+    --resource-group $rg --location $location `
+    --account-name $anfAccount --pool-name $anfPool `
+    --size $poolSizeTiB --service-level Flexible --qos-type Manual | Out-Null
+Write-Host "  Max pool throughput: $($poolSizeTiB * 5 * 128) MiB/s (VM NIC ~1,500 Mbps is practical ceiling)"
+
+# ── 4. SMB Volumes ─────────────────────────────────────────────────────────────
+Write-Host "[4/4] Creating SMB volumes (3 minimum for migration feasibility test)..."
+
+$volumes = @(
+    @{ Name = "sql-data";   QuotaGiB = 100; TputMiBs = 16 }
+    @{ Name = "sql-logs";   QuotaGiB = 100; TputMiBs = 8  }
+    @{ Name = "sql-backup"; QuotaGiB = 256; TputMiBs = 8  }
+)
+
+foreach ($vol in $volumes) {
+    Write-Host "  $($vol.Name) — $($vol.QuotaGiB) GiB / $($vol.TputMiBs) MiB/s"
+    az netappfiles volume create `
+        --resource-group $rg --location $location `
+        --account-name $anfAccount --pool-name $anfPool `
+        --name $vol.Name `
+        --usage-threshold $vol.QuotaGiB `
+        --throughput-mibps $vol.TputMiBs `
+        --protocol-types CIFS `
+        --subnet-id $ANFSubnetId | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw "Volume creation failed for $($vol.Name)." }
+}
+
+Write-Host "`n========================================================="
+Write-Host "  ANF Test Infrastructure — Ready"
+Write-Host "========================================================="
+Write-Host "  Account : $anfAccount  ($rg, $location)"
+Write-Host "  Pool    : $anfPool  ($poolSizeTiB TiB Flexible, Manual QoS)"
+Write-Host "  Volumes :"
+Write-Host "    \\ANFTEST01\sql-data   100 GiB / 16 MiB/s"
+Write-Host "    \\ANFTEST01\sql-logs   100 GiB /  8 MiB/s"
+Write-Host "    \\ANFTEST01\sql-backup 256 GiB /  8 MiB/s"
+Write-Host ""
+Write-Host "  Mount on VM (run over RDP):"
+Write-Host "    net use F: \\ANFTEST01\sql-data /persistent:yes"
+Write-Host "    net use G: \\ANFTEST01\sql-logs /persistent:yes"
+Write-Host "    net use J: \\ANFTEST01\sql-backup /persistent:yes"
+Write-Host ""
+Write-Host "  T5 throughput boost (online, no restart):"
+Write-Host "    az netappfiles volume update --resource-group $rg --account-name $anfAccount --pool-name $anfPool --name sql-backup --throughput-mibps 128"
+Write-Host ""
+Write-Host "  Clean up ANF: az netappfiles account delete --resource-group $rg --name $anfAccount --yes"
 ```

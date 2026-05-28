@@ -1,9 +1,14 @@
 ﻿<#
 .SYNOPSIS
-  Configure SQLPRD01SIM — disk layout, SQL Server paths, TempDB, test database.
-  Runs inside the VM via az vm run-command (called by deploy-sqlprd01-sim.ps1)
-  or manually over RDP.
-  Matches SQLPRD01 production disk layout exactly.
+  Configure test SQL VM for ANF migration and technology feasibility testing.
+  Minimum setup: 1 data disk (F:), all SQL directories on F:.
+  Run this script manually on the VM over RDP after creating the VM in Azure portal.
+  Tested with: Standard_B4ms, 1x 32 GB StandardSSD data disk, SQL Server 2022 Developer.
+
+.REQUIREMENTS
+  - VM created in Azure portal (see README Appendix C for manual steps and spec)
+  - 1 data disk (32 GB, Standard SSD, LUN 0) attached to the VM
+  - Run as Administrator in PowerShell on the VM
 #>
 
 Set-StrictMode -Version Latest
@@ -11,70 +16,48 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step { param($n, $msg) Write-Host "`n[$n] $msg" -ForegroundColor Cyan }
 
-# ── 1. Wait for all 5 data disks to appear ────────────────────────────────────
-Write-Step "1/6" "Waiting for 5 RAW data disks..."
+# ── 1. Wait for the single data disk to appear ────────────────────────────────
+Write-Step "1/5" "Waiting for 1 RAW data disk (LUN 0, 32 GB)..."
 
 $maxWait = 120
 $elapsed = 0
 do {
     $rawDisks = Get-Disk | Where-Object { $_.PartitionStyle -eq 'RAW' } | Sort-Object Number
-    if ($rawDisks.Count -eq 5) { break }
+    if ($rawDisks.Count -ge 1) { break }
     Start-Sleep -Seconds 10
     $elapsed += 10
-    Write-Host "  Found $($rawDisks.Count)/5 RAW disks — waiting ($elapsed s)..."
+    Write-Host "  Found $($rawDisks.Count)/1 RAW disks — waiting ($elapsed s)..."
 } while ($elapsed -lt $maxWait)
 
-if ($rawDisks.Count -ne 5) {
-    throw "Expected 5 RAW disks but found $($rawDisks.Count) after ${maxWait}s. Check disk attachment."
+if ($rawDisks.Count -lt 1) {
+    throw "Expected at least 1 RAW data disk but found none after ${maxWait}s. Attach a 32 GB data disk in Azure portal and retry."
 }
 
-# ── 2. Initialize disks and assign drive letters ───────────────────────────────
-Write-Step "2/6" "Initializing disks and assigning drive letters..."
-#
-# Azure presents data disks sorted by LUN in disk-number order (after OS=0 and Temp=1).
-# Sorted RAW disks map to LUNs 0-4 in order:
-#   Index 0  →  LUN 0, 32 GB  →  F: SQLData
-#   Index 1  →  LUN 1, 32 GB  →  J: SQLBackup
-#   Index 2  →  LUN 2, 32 GB  →  G: SQLLogs
-#   Index 3  →  LUN 3, 32 GB  →  I: SQLIndex
-#   Index 4  →  LUN 4, 32 GB  →  H: SQLTempDB
+$disk   = $rawDisks[0]
+$diskGB = [math]::Round($disk.Size / 1GB, 0)
+Write-Host "  Found disk $($disk.Number) ($diskGB GB) — will format as F: [SQLData]"
 
-$driveMap = @(
-    [PSCustomObject]@{ Letter = 'F'; Label = 'SQLData';   ExpectedGB = 32 }   # LUN 0
-    [PSCustomObject]@{ Letter = 'J'; Label = 'SQLBackup'; ExpectedGB = 32 }   # LUN 1
-    [PSCustomObject]@{ Letter = 'G'; Label = 'SQLLogs';   ExpectedGB = 32 }   # LUN 2
-    [PSCustomObject]@{ Letter = 'I'; Label = 'SQLIndex';  ExpectedGB = 32 }   # LUN 3
-    [PSCustomObject]@{ Letter = 'H'; Label = 'SQLTempDB'; ExpectedGB = 32 }   # LUN 4
-)
+# ── 2. Initialize disk and assign drive letter F: ─────────────────────────────
+Write-Step "2/5" "Initializing disk and assigning drive letter F:..."
 
-for ($i = 0; $i -lt $rawDisks.Count; $i++) {
-    $disk  = $rawDisks[$i]
-    $drive = $driveMap[$i]
-    $diskGB = [math]::Round($disk.Size / 1GB, 0)
+$disk | Initialize-Disk -PartitionStyle GPT -PassThru |
+    New-Partition -DriveLetter 'F' -UseMaximumSize |
+    Format-Volume -FileSystem NTFS -NewFileSystemLabel 'SQLData' `
+                  -AllocationUnitSize 65536 -Confirm:$false | Out-Null
+# 64 KiB allocation unit — recommended for SQL Server data and log files
 
-    if ($diskGB -ne $drive.ExpectedGB) {
-        Write-Warning "Disk $($disk.Number): expected $($drive.ExpectedGB) GB, got $diskGB GB. Check LUN order."
-    }
+Write-Host "  Disk $($disk.Number) ($diskGB GB) → F: [SQLData]"
 
-    Write-Host "  Disk $($disk.Number) ($diskGB GB) → $($drive.Letter): [$($drive.Label)]"
+# ── 3. Create SQL directory structure on F: ───────────────────────────────────
+Write-Step "3/5" "Creating SQL directory structure on F:..."
 
-    $disk | Initialize-Disk -PartitionStyle GPT -PassThru |
-        New-Partition -DriveLetter $drive.Letter -UseMaximumSize |
-        Format-Volume -FileSystem NTFS -NewFileSystemLabel $drive.Label `
-                      -AllocationUnitSize 65536 -Confirm:$false | Out-Null
-    # 64 KiB allocation unit — recommended for SQL Server data and log files
-}
-
-# ── 3. Create SQL directory structure ─────────────────────────────────────────
-Write-Step "3/6" "Creating SQL directory structure..."
-
+# All SQL roles share the single F: disk — sufficient for technology feasibility testing
 $dirs = @(
     'F:\MSSQL\DATA'               # SQL data files (.mdf, .ndf)
-    'G:\MSSQL\LOG'                # Transaction log files (.ldf)
-    'H:\MSSQL\TEMPDB'             # TempDB data + log
-    'I:\MSSQL\INDEX'              # Secondary filegroup / index files
-    'J:\MSSQL\BACKUP'             # SQL Server backups
-    'J:\MSSQL\BACKUP\MIGRATION'   # Migration staging (README Section 3.3 Phase A)
+    'F:\MSSQL\LOG'                # Transaction log files (.ldf)
+    'F:\MSSQL\TEMPDB'             # TempDB data + log
+    'F:\MSSQL\BACKUP'             # SQL Server backups
+    'F:\MSSQL\BACKUP\MIGRATION'   # Migration staging (README Section 3.3 Phase A)
 )
 
 foreach ($dir in $dirs) {
@@ -82,7 +65,7 @@ foreach ($dir in $dirs) {
     Write-Host "  $dir"
 }
 
-# Grant SQL Server service account full control on each directory
+# Grant SQL Server service account full control on all SQL directories
 $sqlServiceAccount = "NT SERVICE\MSSQLSERVER"
 foreach ($dir in ($dirs | Where-Object { $_ -notlike '*MIGRATION*' })) {
     $acl = Get-Acl $dir
@@ -94,7 +77,7 @@ foreach ($dir in ($dirs | Where-Object { $_ -notlike '*MIGRATION*' })) {
 }
 
 # ── 4. Configure SQL Server ───────────────────────────────────────────────────
-Write-Step "4/6" "Configuring SQL Server (paths, memory, TempDB)..."
+Write-Step "4/5" "Configuring SQL Server (paths, memory, TempDB)..."
 
 # Wait for SQL Server service to be running
 $retries = 0
@@ -127,8 +110,8 @@ function Invoke-SQL {
     if ($LASTEXITCODE -ne 0) { Write-Warning "sqlcmd returned $LASTEXITCODE for: $label" }
 }
 
-# Default data, log, and backup paths for all NEW databases
-Invoke-SQL -label "Default data/log/backup paths" -query @"
+# All SQL directories are on the single F: disk
+Invoke-SQL -label "Default data/log/backup paths (all on F:)" -query @"
 EXEC xp_instance_regwrite
     N'HKEY_LOCAL_MACHINE',
     N'Software\Microsoft\MSSQLServer\MSSQLServer',
@@ -137,20 +120,19 @@ EXEC xp_instance_regwrite
 EXEC xp_instance_regwrite
     N'HKEY_LOCAL_MACHINE',
     N'Software\Microsoft\MSSQLServer\MSSQLServer',
-    N'DefaultLog', REG_SZ, N'G:\MSSQL\LOG';
+    N'DefaultLog', REG_SZ, N'F:\MSSQL\LOG';
 
 EXEC xp_instance_regwrite
     N'HKEY_LOCAL_MACHINE',
     N'Software\Microsoft\MSSQLServer\MSSQLServer',
-    N'BackupDirectory', REG_SZ, N'J:\MSSQL\BACKUP';
+    N'BackupDirectory', REG_SZ, N'F:\MSSQL\BACKUP';
 "@
 
-# Max server memory: 32 GiB VM, leave 4 GiB for OS = 28 GiB for SQL
-# Matches SQLPRD01 observed 81-94% memory utilisation
-Invoke-SQL -label "Max server memory = 28672 MB (28 GiB)" -query @"
+# Standard_B4ms: 16 GiB total — leave 4 GiB for OS = 12 GiB for SQL
+Invoke-SQL -label "Max server memory = 12288 MB (12 GiB for Standard_B4ms)" -query @"
 EXEC sp_configure 'show advanced options', 1;
 RECONFIGURE;
-EXEC sp_configure 'max server memory (MB)', 28672;
+EXEC sp_configure 'max server memory (MB)', 12288;
 RECONFIGURE;
 "@
 
@@ -160,51 +142,47 @@ EXEC sp_configure 'remote access', 1;
 RECONFIGURE;
 "@
 
-# Move TempDB data and log files to H:\MSSQL\TEMPDB (requires SQL restart)
-Invoke-SQL -label "Relocate TempDB to H:" -query @"
+# Relocate TempDB to F:\MSSQL\TEMPDB (requires SQL restart)
+Invoke-SQL -label "Relocate TempDB to F:\MSSQL\TEMPDB" -query @"
 USE master;
 ALTER DATABASE tempdb
-    MODIFY FILE (NAME = N'tempdev', FILENAME = N'H:\MSSQL\TEMPDB\tempdb.mdf');
+    MODIFY FILE (NAME = N'tempdev', FILENAME = N'F:\MSSQL\TEMPDB\tempdb.mdf');
 ALTER DATABASE tempdb
-    MODIFY FILE (NAME = N'templog', FILENAME = N'H:\MSSQL\TEMPDB\templog.ldf');
+    MODIFY FILE (NAME = N'templog', FILENAME = N'F:\MSSQL\TEMPDB\templog.ldf');
 "@
 
 # Open Windows Firewall for SQL Server 1433 (in case not done by marketplace image)
 netsh advfirewall firewall add rule `
     name="SQL Server 1433" dir=in action=allow protocol=TCP localport=1433 | Out-Null
 
-# ── 5. Restart SQL to apply TempDB path change ────────────────────────────────
-Write-Step "5/6" "Restarting SQL Server (TempDB relocation takes effect on restart)..."
+# ── 5. Restart SQL and create TestDB ─────────────────────────────────────────
+Write-Step "5/5" "Restarting SQL Server and creating TestDB..."
 Restart-Service -Name MSSQLSERVER -Force
 Start-Sleep -Seconds 45
 
-# ── 6. Create TestDB for ANF test plan (README Section 6) ────────────────────
-Write-Step "6/6" "Creating TestDB for ANF evaluation test cases..."
+# ── Create TestDB for ANF migration feasibility test ─────────────────────────
+# Simple two-file database (primary data + log) — sufficient to rehearse the
+# backup/restore migration path and validate SMB3 connectivity to ANF volumes.
 
-Invoke-SQL -label "Create TestDB (data on F:, log on G:, index filegroup on I:)" -query @"
+Invoke-SQL -label "Create TestDB (data and log on F:)" -query @"
 IF DB_ID(N'TestDB') IS NULL
 BEGIN
     CREATE DATABASE TestDB
     ON PRIMARY (
         NAME = N'TestDB_data',
         FILENAME = N'F:\MSSQL\DATA\TestDB.mdf',
-        SIZE = 512MB, MAXSIZE = UNLIMITED, FILEGROWTH = 256MB
-    ),
-    FILEGROUP [INDEXES] (
-        NAME = N'TestDB_index',
-        FILENAME = N'I:\MSSQL\INDEX\TestDB_idx.ndf',
-        SIZE = 64MB, MAXSIZE = UNLIMITED, FILEGROWTH = 64MB
+        SIZE = 256MB, MAXSIZE = UNLIMITED, FILEGROWTH = 128MB
     )
     LOG ON (
         NAME = N'TestDB_log',
-        FILENAME = N'G:\MSSQL\LOG\TestDB_log.ldf',
-        SIZE = 128MB, MAXSIZE = UNLIMITED, FILEGROWTH = 64MB
+        FILENAME = N'F:\MSSQL\LOG\TestDB_log.ldf',
+        SIZE = 64MB, MAXSIZE = UNLIMITED, FILEGROWTH = 32MB
     );
 END
 "@
 
-# Seed workload table used by Section 6.3 T2 (DiskSpd + HammerDB simulation)
-Invoke-SQL -label "Seed WorkloadTest table (T2 perf baseline)" -query @"
+# Seed workload table used for ANF feasibility test (T1 connectivity, T2 latency baseline)
+Invoke-SQL -label "Seed WorkloadTest table" -query @"
 USE TestDB;
 
 IF OBJECT_ID(N'dbo.WorkloadTest', N'U') IS NULL
@@ -227,8 +205,8 @@ END
 # ── Verification output ───────────────────────────────────────────────────────
 Write-Host "`n════ Verification ════════════════════════════════════════════"
 
-Write-Host "`nDrive layout:"
-Get-Volume | Where-Object { $_.DriveLetter -in @('F','G','H','I','J') } |
+Write-Host "`nDrive layout (F: — all SQL):"
+Get-Volume | Where-Object { $_.DriveLetter -eq 'F' } |
     Select-Object DriveLetter, FileSystemLabel,
         @{N='AllocUnitKB'; E={ [math]::Round($_.AllocationUnitSize/1KB, 0) }},
         @{N='SizeGB';  E={ [math]::Round($_.Size/1GB, 0) }},
@@ -254,5 +232,4 @@ ORDER BY wait_time_ms DESC;
 Write-Host "TestDB files:"
 Invoke-SQL -query "SELECT name, physical_name, size*8/1024 AS size_mb FROM sys.master_files WHERE DB_NAME(database_id) = 'TestDB';"
 
-Write-Host "`nConfiguration complete. VM mirrors SQLPRD01 disk layout."
-Write-Host "Ready for ANF test plan (README Section 6)."
+Write-Host "`nConfiguration complete. TestDB ready for ANF migration feasibility test (README Section 6)."
